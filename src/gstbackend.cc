@@ -13,7 +13,7 @@ enum { PROP_0, PROP_MODEL };
 typedef struct _GstBackendPrivate GstBackendPrivate;
 struct _GstBackendPrivate {
   fastoml::SupportedBackends code;
-  fastoml::BackEnd* backend;
+  fastoml::Backend* backend;
 };
 
 G_DEFINE_TYPE_WITH_CODE(
@@ -31,6 +31,8 @@ static void gst_backend_init(GstBackend* self);
 static void gst_backend_finalize(GObject* obj);
 static void gst_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec);
 static void gst_backend_get_property(GObject* object, guint property_id, GValue* value, GParamSpec* pspec);
+
+#define GST_BACKEND_ERROR gst_backend_error_quark()
 
 static void gst_backend_class_init(GstBackendClass* klass) {
   GObjectClass* oclass = G_OBJECT_CLASS(klass);
@@ -93,7 +95,7 @@ gboolean gst_backend_start(GstBackend* self, const gchar* model_location, GError
 
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
   g_return_val_if_fail(priv, FALSE);
-  fastoml::BackEnd* backend = priv->backend;
+  fastoml::Backend* backend = priv->backend;
 
   g_return_val_if_fail(priv, FALSE);
   g_return_val_if_fail(model_location, FALSE);
@@ -103,8 +105,8 @@ gboolean gst_backend_start(GstBackend* self, const gchar* model_location, GError
     return TRUE;
   }
 
-  fastoml::BackEnd* lbackend = nullptr;
-  common::Error err = fastoml::BackEnd::MakeBackEnd(priv->code, &lbackend);
+  fastoml::Backend* lbackend = nullptr;
+  common::Error err = fastoml::Backend::MakeBackEnd(priv->code, &lbackend);
   if (err) {
     return FALSE;
   }
@@ -132,7 +134,7 @@ gboolean gst_backend_stop(GstBackend* self, GError** error) {
 
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
   g_return_val_if_fail(priv, FALSE);
-  fastoml::BackEnd* backend = priv->backend;
+  fastoml::Backend* backend = priv->backend;
   g_return_val_if_fail(backend, FALSE);
 
   common::Error err = backend->Stop();
@@ -155,7 +157,7 @@ gboolean gst_backend_process_frame(GstBackend* self,
 
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
   g_return_val_if_fail(priv, FALSE);
-  fastoml::BackEnd* backend = priv->backend;
+  fastoml::Backend* backend = priv->backend;
   g_return_val_if_fail(backend, FALSE);
 
   fastoml::IFrame* frame = nullptr;
@@ -189,14 +191,12 @@ gboolean gst_backend_process_frame(GstBackend* self,
 gboolean gst_backend_set_framework_code(GstBackend* backend, fastoml::SupportedBackends code) {
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(backend);
   g_return_val_if_fail(priv, FALSE);
-
   priv->code = code;
   return TRUE;
 }
 
 guint gst_backend_get_framework_code(GstBackend* backend) {
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(backend);
-  g_return_val_if_fail(priv, -1);
-
+  g_return_val_if_fail(priv, FALSE);
   return priv->code;
 }
