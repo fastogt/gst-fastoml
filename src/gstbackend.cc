@@ -5,6 +5,8 @@
 
 #include <fastoml/backend.h>
 
+#include "gstbackend_fwd.h"
+
 GST_DEBUG_CATEGORY_STATIC(gst_backend_debug_category);
 #define GST_CAT_DEFAULT gst_backend_debug_category
 
@@ -29,8 +31,6 @@ static GParamSpec* gst_backend_param_to_spec(fastoml::ParameterMeta* param);
 static int gst_backend_param_flags(int flags);
 static void gst_backend_init(GstBackend* self);
 static void gst_backend_finalize(GObject* obj);
-static void gst_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec);
-static void gst_backend_get_property(GObject* object, guint property_id, GValue* value, GParamSpec* pspec);
 
 #define GST_BACKEND_ERROR gst_backend_error_quark()
 
@@ -89,6 +89,10 @@ GParamSpec* gst_backend_param_to_spec(fastoml::ParameterMeta* param) {
 void gst_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec) {}
 
 void gst_backend_get_property(GObject* object, guint property_id, GValue* value, GParamSpec* pspec) {}
+
+void gst_backend_install_properties(GstBackendClass* klass, fastoml::SupportedBackends code) {
+
+}
 
 gboolean gst_backend_start(GstBackend* self, const gchar* model_location, GError** error) {
   g_return_val_if_fail(error, FALSE);

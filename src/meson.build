@@ -22,8 +22,6 @@ lib_tensorflow = cc.find_library('tensorflow', dirs : ['/usr/local/lib'])
 inc_tensorflow = include_directories('/usr/local/include')
 
 backend_sources = [
-  'gsttensorflow.h',
-  'gsttensorflow.cc',
   'gstchildinspector.h',
   'gstchildinspector.cc',
   'gstinferencebackends.h',
@@ -32,7 +30,9 @@ backend_sources = [
   'gstvideoinference.cc',
   'gstbackend.h',
   'gstbackend.cc',
-  'gstbackendsubclass.h'
+  'gstbackends_fwd.h',
+  'gsttensorflow.h',
+  'gsttensorflow.cc'
 ]
 
 backend = shared_library('backend',

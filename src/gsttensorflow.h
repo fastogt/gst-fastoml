@@ -3,7 +3,7 @@
 
 #include <gst/gst.h>
 
-#include <gstbackends_fwd.h>
+#include <gstbackend_fwd.h>
 
 G_BEGIN_DECLS
 
