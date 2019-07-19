@@ -1,4 +1,4 @@
-plugin_c_args = ['-DHAVE_CONFIG_H']
+plugin_cpp_args = ['-DHAVE_CONFIG_H']
 
 cdata = configuration_data()
 cdata.set_quoted('PACKAGE_VERSION', gst_version)
@@ -12,15 +12,39 @@ configure_file(output : 'config.h', configuration : cdata)
 gstvideo_dep = dependency('gstreamer-video-1.0',
     fallback: ['gst-plugins-base', 'video_dep'])
 
+lib_common = cc.find_library('common', dirs : ['/usr/local/lib'])
+inc_common = include_directories('/usr/local/include')
+
+lib_fastoml = cc.find_library('fastoml', dirs : ['/usr/local/lib'])
+inc_fastoml = include_directories('/usr/local/include')
+
+lib_tensorflow = cc.find_library('tensorflow', dirs : ['/usr/local/lib'])
+inc_tensorflow = include_directories('/usr/local/include')
+
+backend_sources = [
+  'gstbackend.h',
+  'gstbackend.cc'
+]
+
+backend = shared_library('backend',
+  backend_sources,
+  cpp_args: plugin_cpp_args,
+  dependencies : [gst_dep, gstvideo_dep, lib_common, lib_fastoml, lib_tensorflow],
+  include_directories : [inc_fastoml, inc_common, inc_tensorflow],
+  install : true,
+  install_dir : plugins_install_dir,
+)
+
 yolov2_sources = [
   'gstyolov2.h',
-  'gstyolov2.c',
-  ]
+  'gstyolov2.cc'
+]
 
-yolov2 = library('yolov2',
+yolov2 = shared_library('yolov2',
   yolov2_sources,
-  c_args: plugin_c_args,
+  cpp_args: plugin_cpp_args,
   dependencies : [gst_dep, gstvideo_dep],
+  include_directories : [],
   install : true,
   install_dir : plugins_install_dir,
 )

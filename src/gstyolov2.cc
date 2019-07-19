@@ -53,8 +53,9 @@ static void gst_plugin_template_class_init(GstPluginTemplateClass* klass) {
       gobject_class, PROP_SILENT,
       g_param_spec_boolean("silent", "Silent", "Produce verbose output ?", FALSE, G_PARAM_READWRITE));
 
-  gst_element_class_set_details_simple(gstelement_class, "Plugin", "FIXME:Generic", "FIXME:Generic Template Element",
-                                       "AUTHOR_NAME AUTHOR_EMAIL");
+  gst_element_class_set_details_simple(gstelement_class, "yolov2", "Filter",
+                                       "Infers incoming image frames using a pretrained Yolo model",
+                                       "Alexandr Topilski <support@fastogt.com>");
 
   gst_element_class_add_pad_template(gstelement_class, gst_static_pad_template_get(&src_factory));
   gst_element_class_add_pad_template(gstelement_class, gst_static_pad_template_get(&sink_factory));
