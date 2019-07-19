@@ -1,153 +1,442 @@
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <gst/gst.h>
+#include <gst/math-compat.h>
 
+#include <string.h>
 #include "gstyolov2.h"
 
-GST_DEBUG_CATEGORY_STATIC(gst_plugin_template_debug);
-#define GST_CAT_DEFAULT gst_plugin_template_debug
+#define PLUGIN_NAME "yolov2"
 
-/* Filter signals and args */
-enum {
-  /* FILL ME */
-  LAST_SIGNAL
+GST_DEBUG_CATEGORY_STATIC(videobalance_debug);
+#define GST_CAT_DEFAULT videobalance_debug
+
+enum { PROP_0 };
+
+#define PROCESSING_CAPS                                \
+  "{ AYUV, ARGB, BGRA, ABGR, RGBA, Y444, xRGB, RGBx, " \
+  "xBGR, BGRx, RGB, BGR, Y42B, YUY2, UYVY, YVYU, "     \
+  "I420, YV12, IYUV, Y41B, NV12, NV21 }"
+
+static GstStaticPadTemplate gst_video_balance_src_template =
+    GST_STATIC_PAD_TEMPLATE("src",
+                            GST_PAD_SRC,
+                            GST_PAD_ALWAYS,
+                            GST_STATIC_CAPS(GST_VIDEO_CAPS_MAKE(PROCESSING_CAPS) ";"
+                                                                                 "video/x-raw(ANY)"));
+
+static GstStaticPadTemplate gst_video_balance_sink_template =
+    GST_STATIC_PAD_TEMPLATE("sink",
+                            GST_PAD_SINK,
+                            GST_PAD_ALWAYS,
+                            GST_STATIC_CAPS(GST_VIDEO_CAPS_MAKE(PROCESSING_CAPS) ";"
+                                                                                 "video/x-raw(ANY)"));
+
+static void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec);
+static void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec);
+
+#define gst_yolov2_parent_class parent_class
+G_DEFINE_TYPE_WITH_CODE(
+    GstYolov2,
+    gst_yolov2,
+    GST_TYPE_VIDEO_FILTER,
+    GST_DEBUG_CATEGORY_INIT(videobalance_debug, PLUGIN_NAME, 0, "debug category for yolov2 element"));
+
+static void gst_video_balance_planar_yuv(GstYolov2* videobalance, GstVideoFrame* frame) {
+  gint x, y;
+  guint8* ydata;
+  guint8 *udata, *vdata;
+  gint ystride, ustride, vstride;
+  gint width, height;
+  gint width2, height2;
+  guint8* tabley = videobalance->tabley;
+  guint8** tableu = videobalance->tableu;
+  guint8** tablev = videobalance->tablev;
+
+  width = GST_VIDEO_FRAME_WIDTH(frame);
+  height = GST_VIDEO_FRAME_HEIGHT(frame);
+
+  ydata = (guint8*)GST_VIDEO_FRAME_PLANE_DATA(frame, 0);
+  ystride = GST_VIDEO_FRAME_PLANE_STRIDE(frame, 0);
+
+  for (y = 0; y < height; y++) {
+    guint8* yptr;
+
+    yptr = ydata + y * ystride;
+    for (x = 0; x < width; x++) {
+      *yptr = tabley[*yptr];
+      yptr++;
+    }
+  }
+
+  width2 = GST_VIDEO_FRAME_COMP_WIDTH(frame, 1);
+  height2 = GST_VIDEO_FRAME_COMP_HEIGHT(frame, 1);
+
+  udata = (guint8*)GST_VIDEO_FRAME_PLANE_DATA(frame, 1);
+  vdata = (guint8*)GST_VIDEO_FRAME_PLANE_DATA(frame, 2);
+  ustride = GST_VIDEO_FRAME_PLANE_STRIDE(frame, 1);
+  vstride = GST_VIDEO_FRAME_PLANE_STRIDE(frame, 2);
+
+  for (y = 0; y < height2; y++) {
+    guint8 *uptr, *vptr;
+    guint8 u1, v1;
+
+    uptr = udata + y * ustride;
+    vptr = vdata + y * vstride;
+
+    for (x = 0; x < width2; x++) {
+      u1 = *uptr;
+      v1 = *vptr;
+
+      *uptr++ = tableu[u1][v1];
+      *vptr++ = tablev[u1][v1];
+    }
+  }
+}
+
+static void gst_video_balance_semiplanar_yuv(GstYolov2* videobalance, GstVideoFrame* frame) {
+  gint x, y;
+  guint8* ydata;
+  guint8* uvdata;
+  gint ystride, uvstride;
+  gint width, height;
+  gint width2, height2;
+  guint8* tabley = videobalance->tabley;
+  guint8** tableu = videobalance->tableu;
+  guint8** tablev = videobalance->tablev;
+  gint upos, vpos;
+
+  width = GST_VIDEO_FRAME_WIDTH(frame);
+  height = GST_VIDEO_FRAME_HEIGHT(frame);
+
+  ydata = (guint8*)GST_VIDEO_FRAME_PLANE_DATA(frame, 0);
+  ystride = GST_VIDEO_FRAME_PLANE_STRIDE(frame, 0);
+
+  for (y = 0; y < height; y++) {
+    guint8* yptr;
+
+    yptr = ydata + y * ystride;
+    for (x = 0; x < width; x++) {
+      *yptr = tabley[*yptr];
+      yptr++;
+    }
+  }
+
+  width2 = GST_VIDEO_FRAME_COMP_WIDTH(frame, 1);
+  height2 = GST_VIDEO_FRAME_COMP_HEIGHT(frame, 1);
+
+  uvdata = (guint8*)GST_VIDEO_FRAME_PLANE_DATA(frame, 1);
+  uvstride = GST_VIDEO_FRAME_PLANE_STRIDE(frame, 1);
+
+  upos = GST_VIDEO_INFO_FORMAT(&frame->info) == GST_VIDEO_FORMAT_NV12 ? 0 : 1;
+  vpos = GST_VIDEO_INFO_FORMAT(&frame->info) == GST_VIDEO_FORMAT_NV12 ? 1 : 0;
+
+  for (y = 0; y < height2; y++) {
+    guint8* uvptr;
+    guint8 u1, v1;
+
+    uvptr = uvdata + y * uvstride;
+
+    for (x = 0; x < width2; x++) {
+      u1 = uvptr[upos];
+      v1 = uvptr[vpos];
+
+      uvptr[upos] = tableu[u1][v1];
+      uvptr[vpos] = tablev[u1][v1];
+      uvptr += 2;
+    }
+  }
+}
+
+static void gst_video_balance_packed_yuv(GstYolov2* videobalance, GstVideoFrame* frame) {
+  gint x, y, stride;
+  guint8 *ydata, *udata, *vdata;
+  gint yoff, uoff, voff;
+  gint width, height;
+  gint width2, height2;
+  guint8* tabley = videobalance->tabley;
+  guint8** tableu = videobalance->tableu;
+  guint8** tablev = videobalance->tablev;
+
+  width = GST_VIDEO_FRAME_WIDTH(frame);
+  height = GST_VIDEO_FRAME_HEIGHT(frame);
+
+  stride = GST_VIDEO_FRAME_PLANE_STRIDE(frame, 0);
+  ydata = GST_VIDEO_FRAME_COMP_DATA(frame, 0);
+  yoff = GST_VIDEO_FRAME_COMP_PSTRIDE(frame, 0);
+
+  for (y = 0; y < height; y++) {
+    guint8* yptr;
+
+    yptr = ydata + y * stride;
+    for (x = 0; x < width; x++) {
+      *yptr = tabley[*yptr];
+      yptr += yoff;
+    }
+  }
+
+  width2 = GST_VIDEO_FRAME_COMP_WIDTH(frame, 1);
+  height2 = GST_VIDEO_FRAME_COMP_HEIGHT(frame, 1);
+
+  udata = GST_VIDEO_FRAME_COMP_DATA(frame, 1);
+  vdata = GST_VIDEO_FRAME_COMP_DATA(frame, 2);
+  uoff = GST_VIDEO_FRAME_COMP_PSTRIDE(frame, 1);
+  voff = GST_VIDEO_FRAME_COMP_PSTRIDE(frame, 2);
+
+  for (y = 0; y < height2; y++) {
+    guint8 *uptr, *vptr;
+    guint8 u1, v1;
+
+    uptr = udata + y * stride;
+    vptr = vdata + y * stride;
+
+    for (x = 0; x < width2; x++) {
+      u1 = *uptr;
+      v1 = *vptr;
+
+      *uptr = tableu[u1][v1];
+      *vptr = tablev[u1][v1];
+
+      uptr += uoff;
+      vptr += voff;
+    }
+  }
+}
+
+static const int cog_ycbcr_to_rgb_matrix_8bit_sdtv[] = {
+    298, 0, 409, -57068, 298, -100, -208, 34707, 298, 516, 0, -70870,
 };
 
-enum { PROP_0, PROP_SILENT };
+static const gint cog_rgb_to_ycbcr_matrix_8bit_sdtv[] = {
+    66, 129, 25, 4096, -38, -74, 112, 32768, 112, -94, -18, 32768,
+};
 
-/* pad templates */
-#define SINK_CAPS "video/x-raw, format={RGB, RGBx, RGBA, BGR, BGRx, BGRA, xRGB, ARGB, xBGR, ABGR}"
-#define SRC_CAPS "video/x-raw, format={RGB, RGBx, RGBA, BGR, BGRx, BGRA, xRGB, ARGB, xBGR, ABGR}"
+#define APPLY_MATRIX(m, o, v1, v2, v3) ((m[o * 4] * v1 + m[o * 4 + 1] * v2 + m[o * 4 + 2] * v3 + m[o * 4 + 3]) >> 8)
 
-static GstStaticPadTemplate sink_factory =
-    GST_STATIC_PAD_TEMPLATE("sink", GST_PAD_SINK, GST_PAD_ALWAYS, GST_STATIC_CAPS(SINK_CAPS));
+static void gst_video_balance_packed_rgb(GstYolov2* videobalance, GstVideoFrame* frame) {
+  gint i, j, height;
+  gint width, stride, row_wrap;
+  gint pixel_stride;
+  guint8* data;
+  gint offsets[3];
+  gint r, g, b;
+  gint y, u, v;
+  gint u_tmp, v_tmp;
+  guint8* tabley = videobalance->tabley;
+  guint8** tableu = videobalance->tableu;
+  guint8** tablev = videobalance->tablev;
 
-static GstStaticPadTemplate src_factory =
-    GST_STATIC_PAD_TEMPLATE("src", GST_PAD_SRC, GST_PAD_ALWAYS, GST_STATIC_CAPS(SRC_CAPS));
+  width = GST_VIDEO_FRAME_WIDTH(frame);
+  height = GST_VIDEO_FRAME_HEIGHT(frame);
 
-#define gst_plugin_template_parent_class parent_class
-G_DEFINE_TYPE(GstPluginTemplate, gst_plugin_template, GST_TYPE_ELEMENT);
+  offsets[0] = GST_VIDEO_FRAME_COMP_OFFSET(frame, 0);
+  offsets[1] = GST_VIDEO_FRAME_COMP_OFFSET(frame, 1);
+  offsets[2] = GST_VIDEO_FRAME_COMP_OFFSET(frame, 2);
 
-static void gst_plugin_template_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec);
-static void gst_plugin_template_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec);
+  data = (guint8*)GST_VIDEO_FRAME_PLANE_DATA(frame, 0);
+  stride = GST_VIDEO_FRAME_PLANE_STRIDE(frame, 0);
 
-static gboolean gst_plugin_template_sink_event(GstPad* pad, GstObject* parent, GstEvent* event);
-static GstFlowReturn gst_plugin_template_chain(GstPad* pad, GstObject* parent, GstBuffer* buf);
+  pixel_stride = GST_VIDEO_FRAME_COMP_PSTRIDE(frame, 0);
+  row_wrap = stride - pixel_stride * width;
 
-/* GObject vmethod implementations */
+  for (i = 0; i < height; i++) {
+    for (j = 0; j < width; j++) {
+      r = data[offsets[0]];
+      g = data[offsets[1]];
+      b = data[offsets[2]];
 
-/* initialize the plugin's class */
-static void gst_plugin_template_class_init(GstPluginTemplateClass* klass) {
-  GObjectClass* gobject_class;
-  GstElementClass* gstelement_class;
+      y = APPLY_MATRIX(cog_rgb_to_ycbcr_matrix_8bit_sdtv, 0, r, g, b);
+      u_tmp = APPLY_MATRIX(cog_rgb_to_ycbcr_matrix_8bit_sdtv, 1, r, g, b);
+      v_tmp = APPLY_MATRIX(cog_rgb_to_ycbcr_matrix_8bit_sdtv, 2, r, g, b);
 
-  gobject_class = (GObjectClass*)klass;
-  gstelement_class = (GstElementClass*)klass;
+      y = CLAMP(y, 0, 255);
+      u_tmp = CLAMP(u_tmp, 0, 255);
+      v_tmp = CLAMP(v_tmp, 0, 255);
 
-  gobject_class->set_property = gst_plugin_template_set_property;
-  gobject_class->get_property = gst_plugin_template_get_property;
+      y = tabley[y];
+      u = tableu[u_tmp][v_tmp];
+      v = tablev[u_tmp][v_tmp];
 
-  g_object_class_install_property(
-      gobject_class, PROP_SILENT,
-      g_param_spec_boolean("silent", "Silent", "Produce verbose output ?", FALSE, G_PARAM_READWRITE));
+      r = APPLY_MATRIX(cog_ycbcr_to_rgb_matrix_8bit_sdtv, 0, y, u, v);
+      g = APPLY_MATRIX(cog_ycbcr_to_rgb_matrix_8bit_sdtv, 1, y, u, v);
+      b = APPLY_MATRIX(cog_ycbcr_to_rgb_matrix_8bit_sdtv, 2, y, u, v);
 
-  gst_element_class_set_details_simple(gstelement_class, "yolov2", "Filter",
-                                       "Infers incoming image frames using a pretrained Yolo model",
-                                       "Alexandr Topilski <support@fastogt.com>");
-
-  gst_element_class_add_pad_template(gstelement_class, gst_static_pad_template_get(&src_factory));
-  gst_element_class_add_pad_template(gstelement_class, gst_static_pad_template_get(&sink_factory));
-}
-
-/* initialize the new element
- * instantiate pads and add them to element
- * set pad calback functions
- * initialize instance structure
- */
-static void gst_plugin_template_init(GstPluginTemplate* filter) {
-  filter->sinkpad = gst_pad_new_from_static_template(&sink_factory, "sink");
-  gst_pad_set_event_function(filter->sinkpad, GST_DEBUG_FUNCPTR(gst_plugin_template_sink_event));
-  gst_pad_set_chain_function(filter->sinkpad, GST_DEBUG_FUNCPTR(gst_plugin_template_chain));
-  GST_PAD_SET_PROXY_CAPS(filter->sinkpad);
-  gst_element_add_pad(GST_ELEMENT(filter), filter->sinkpad);
-
-  filter->srcpad = gst_pad_new_from_static_template(&src_factory, "src");
-  GST_PAD_SET_PROXY_CAPS(filter->srcpad);
-  gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
-
-  filter->silent = FALSE;
-}
-
-static void gst_plugin_template_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec) {
-  GstPluginTemplate* filter = GST_PLUGIN_TEMPLATE(object);
-
-  switch (prop_id) {
-    case PROP_SILENT:
-      filter->silent = g_value_get_boolean(value);
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
-      break;
-  }
-}
-
-static void gst_plugin_template_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec) {
-  GstPluginTemplate* filter = GST_PLUGIN_TEMPLATE(object);
-
-  switch (prop_id) {
-    case PROP_SILENT:
-      g_value_set_boolean(value, filter->silent);
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
-      break;
-  }
-}
-
-/* GstElement vmethod implementations */
-
-/* this function handles sink events */
-static gboolean gst_plugin_template_sink_event(GstPad* pad, GstObject* parent, GstEvent* event) {
-  GstPluginTemplate* filter;
-  gboolean ret;
-
-  filter = GST_PLUGIN_TEMPLATE(parent);
-
-  GST_LOG_OBJECT(filter, "Received %s event: %" GST_PTR_FORMAT, GST_EVENT_TYPE_NAME(event), event);
-
-  switch (GST_EVENT_TYPE(event)) {
-    case GST_EVENT_CAPS: {
-      GstCaps* caps;
-
-      gst_event_parse_caps(event, &caps);
-      /* do something with the caps */
-
-      /* and forward */
-      ret = gst_pad_event_default(pad, parent, event);
-      break;
+      data[offsets[0]] = CLAMP(r, 0, 255);
+      data[offsets[1]] = CLAMP(g, 0, 255);
+      data[offsets[2]] = CLAMP(b, 0, 255);
+      data += pixel_stride;
     }
+    data += row_wrap;
+  }
+}
+
+/* get notified of caps and plug in the correct process function */
+static gboolean gst_video_balance_set_info(GstVideoFilter* vfilter,
+                                           GstCaps* incaps,
+                                           GstVideoInfo* in_info,
+                                           GstCaps* outcaps,
+                                           GstVideoInfo* out_info) {
+  GstYolov2* videobalance = GST_YOLOV2(vfilter);
+
+  GST_DEBUG_OBJECT(videobalance, "in %" GST_PTR_FORMAT " out %" GST_PTR_FORMAT, incaps, outcaps);
+
+  videobalance->process = NULL;
+
+  switch (GST_VIDEO_INFO_FORMAT(in_info)) {
+    case GST_VIDEO_FORMAT_I420:
+    case GST_VIDEO_FORMAT_YV12:
+    case GST_VIDEO_FORMAT_Y41B:
+    case GST_VIDEO_FORMAT_Y42B:
+    case GST_VIDEO_FORMAT_Y444:
+      videobalance->process = gst_video_balance_planar_yuv;
+      break;
+    case GST_VIDEO_FORMAT_YUY2:
+    case GST_VIDEO_FORMAT_UYVY:
+    case GST_VIDEO_FORMAT_AYUV:
+    case GST_VIDEO_FORMAT_YVYU:
+      videobalance->process = gst_video_balance_packed_yuv;
+      break;
+    case GST_VIDEO_FORMAT_NV12:
+    case GST_VIDEO_FORMAT_NV21:
+      videobalance->process = gst_video_balance_semiplanar_yuv;
+      break;
+    case GST_VIDEO_FORMAT_ARGB:
+    case GST_VIDEO_FORMAT_ABGR:
+    case GST_VIDEO_FORMAT_RGBA:
+    case GST_VIDEO_FORMAT_BGRA:
+    case GST_VIDEO_FORMAT_xRGB:
+    case GST_VIDEO_FORMAT_xBGR:
+    case GST_VIDEO_FORMAT_RGBx:
+    case GST_VIDEO_FORMAT_BGRx:
+    case GST_VIDEO_FORMAT_RGB:
+    case GST_VIDEO_FORMAT_BGR:
+      videobalance->process = gst_video_balance_packed_rgb;
+      break;
     default:
-      ret = gst_pad_event_default(pad, parent, event);
+      goto unknown_format;
       break;
   }
+
+  return TRUE;
+
+  /* ERRORS */
+unknown_format : {
+  GST_ERROR_OBJECT(videobalance, "unknown format %" GST_PTR_FORMAT, incaps);
+  return FALSE;
+}
+}
+
+static void gst_video_balance_before_transform(GstBaseTransform* base, GstBuffer* buf) {
+  GstYolov2* balance = GST_YOLOV2(base);
+  GstClockTime timestamp, stream_time;
+
+  timestamp = GST_BUFFER_TIMESTAMP(buf);
+  stream_time = gst_segment_to_stream_time(&base->segment, GST_FORMAT_TIME, timestamp);
+
+  GST_DEBUG_OBJECT(balance, "sync to %" GST_TIME_FORMAT, GST_TIME_ARGS(timestamp));
+
+  if (GST_CLOCK_TIME_IS_VALID(stream_time))
+    gst_object_sync_values(GST_OBJECT(balance), stream_time);
+}
+
+static GstCaps* gst_video_balance_transform_caps(GstBaseTransform* trans,
+                                                 GstPadDirection direction,
+                                                 GstCaps* caps,
+                                                 GstCaps* filter) {
+  GstYolov2* balance = GST_YOLOV2(trans);
+  GstCaps* ret;
+
+  if (filter) {
+    ret = gst_caps_intersect_full(filter, caps, GST_CAPS_INTERSECT_FIRST);
+  } else {
+    ret = gst_caps_ref(caps);
+  }
+
   return ret;
 }
 
-/* chain function
- * this function does the actual processing
- */
-static GstFlowReturn gst_plugin_template_chain(GstPad* pad, GstObject* parent, GstBuffer* buf) {
-  GstPluginTemplate* filter;
+static GstFlowReturn gst_video_balance_transform_frame_ip(GstVideoFilter* vfilter, GstVideoFrame* frame) {
+  GstYolov2* videobalance = GST_YOLOV2(vfilter);
 
-  filter = GST_PLUGIN_TEMPLATE(parent);
+  if (!videobalance->process)
+    goto not_negotiated;
 
-  if (filter->silent == FALSE)
-    g_print("I'm plugged, therefore I'm in.\n");
+  GST_OBJECT_LOCK(videobalance);
+  videobalance->process(videobalance, frame);
+  GST_OBJECT_UNLOCK(videobalance);
 
-  /* just push out the incoming buffer without touching it */
-  return gst_pad_push(filter->srcpad, buf);
+  return GST_FLOW_OK;
+
+  /* ERRORS */
+not_negotiated : {
+  GST_ERROR_OBJECT(videobalance, "Not negotiated yet");
+  return GST_FLOW_NOT_NEGOTIATED;
+}
+}
+
+static void gst_yolov2_finalize(GObject* object) {
+  GList* channels = NULL;
+  GstYolov2* balance = GST_YOLOV2(object);
+
+  g_free(balance->tableu[0]);
+  G_OBJECT_CLASS(parent_class)->finalize(object);
+}
+
+static void gst_yolov2_class_init(GstYolov2Class* klass) {
+  GObjectClass* gobject_class = (GObjectClass*)klass;
+  GstElementClass* gstelement_class = (GstElementClass*)klass;
+  GstBaseTransformClass* trans_class = (GstBaseTransformClass*)klass;
+  GstVideoFilterClass* vfilter_class = (GstVideoFilterClass*)klass;
+
+  gobject_class->finalize = gst_yolov2_finalize;
+  gobject_class->set_property = gst_yolov2_set_property;
+  gobject_class->get_property = gst_yolov2_get_property;
+
+  gst_element_class_set_static_metadata(gstelement_class, "Video analitics", "Filter/Effect/Video", "Detect objects",
+                                        "Alexandr Topilski <support@fastotgt.com>");
+
+  gst_element_class_add_static_pad_template(gstelement_class, &gst_video_balance_sink_template);
+  gst_element_class_add_static_pad_template(gstelement_class, &gst_video_balance_src_template);
+
+  trans_class->before_transform = GST_DEBUG_FUNCPTR(gst_video_balance_before_transform);
+  trans_class->transform_ip_on_passthrough = FALSE;
+  trans_class->transform_caps = GST_DEBUG_FUNCPTR(gst_video_balance_transform_caps);
+
+  vfilter_class->set_info = GST_DEBUG_FUNCPTR(gst_video_balance_set_info);
+  vfilter_class->transform_frame_ip = GST_DEBUG_FUNCPTR(gst_video_balance_transform_frame_ip);
+}
+
+static void gst_yolov2_init(GstYolov2* videobalance) {
+  gint i;
+
+  /* Initialize propertiews */
+  videobalance->tableu[0] = g_new(guint8, 256 * 256 * 2);
+  for (i = 0; i < 256; i++) {
+    videobalance->tableu[i] = videobalance->tableu[0] + i * 256 * sizeof(guint8);
+    videobalance->tablev[i] = videobalance->tableu[0] + 256 * 256 * sizeof(guint8) + i * 256 * sizeof(guint8);
+  }
+}
+
+static void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec) {
+  GstYolov2* balance = GST_YOLOV2(object);
+  GST_OBJECT_LOCK(balance);
+  switch (prop_id) {
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+      break;
+  }
+
+  GST_OBJECT_UNLOCK(balance);
+}
+
+static void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec) {
+  GstYolov2* balance = GST_YOLOV2(object);
+  switch (prop_id) {
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+      break;
+  }
 }
 
 /* entry point to initialize the plug-in
@@ -155,13 +444,7 @@ static GstFlowReturn gst_plugin_template_chain(GstPad* pad, GstObject* parent, G
  * register the element factories and other features
  */
 static gboolean plugin_init(GstPlugin* plugin) {
-  /* debug category for fltering log messages
-   *
-   * exchange the string 'Template plugin' with your description
-   */
-  GST_DEBUG_CATEGORY_INIT(gst_plugin_template_debug, "yolov2", 0, "Yolov2 plugin");
-
-  return gst_element_register(plugin, "yolov2", GST_RANK_NONE, GST_TYPE_PLUGIN_TEMPLATE);
+  return gst_element_register(plugin, PLUGIN_NAME, GST_RANK_NONE, GST_TYPE_YOLOV2);
 }
 
 GST_PLUGIN_DEFINE(GST_VERSION_MAJOR,

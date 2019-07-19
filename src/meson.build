@@ -30,7 +30,7 @@ backend_sources = [
   'gstvideoinference.cc',
   'gstbackend.h',
   'gstbackend.cc',
-  'gstbackends_fwd.h',
+  'gstbackend_fwd.h',
   'gsttensorflow.h',
   'gsttensorflow.cc'
 ]
