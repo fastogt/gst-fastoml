@@ -1,11 +1,16 @@
 #include "gsttensorflow.h"
 
+#include "gstbackend_subclass.h"
+
 GST_DEBUG_CATEGORY_STATIC(gst_tensorflow_debug_category);
 #define GST_CAT_DEFAULT gst_tensorflow_debug_category
 
 struct _GstTensorflow {
   GstBackend parent;
 };
+
+#define INPUT_LAYER "input-layer"
+#define OUTPUT_LAYER "output-layer"
 
 #define DEFAULT_PROP_INPUT NULL
 #define DEFAULT_PROP_OUTPUT NULL
@@ -46,14 +51,15 @@ static void gst_tensorflow_init(GstTensorflow* self) {
 }
 
 void gst_tenserflow_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec) {
-  GstTensorflow* tens = GST_TENSORFLOW(object);
+  GstTensorflow* self = GST_TENSORFLOW(object);
 
-  GST_OBJECT_LOCK(tens);
+  GST_OBJECT_LOCK(self);
   switch (property_id) {
     case PROP_INPUT: {
       GstState actual_state;
-      gst_element_get_state(GST_ELEMENT(object), &actual_state, NULL, GST_SECOND);
+      gst_element_get_state(GST_ELEMENT(self), &actual_state, NULL, GST_SECOND);
       if (actual_state <= GST_STATE_READY) {
+        gst_backend_set_property(GST_BACKEND(self), INPUT_LAYER, value);
       } else {
         GST_ERROR_OBJECT(object, "Input-layer can only be set in the NULL or READY states");
       }
@@ -61,34 +67,37 @@ void gst_tenserflow_backend_set_property(GObject* object, guint property_id, con
     }
     case PROP_OUTPUT: {
       GstState actual_state;
-      gst_element_get_state(GST_ELEMENT(object), &actual_state, NULL, GST_SECOND);
+      gst_element_get_state(GST_ELEMENT(self), &actual_state, NULL, GST_SECOND);
       if (actual_state <= GST_STATE_READY) {
+        gst_backend_set_property(GST_BACKEND(self), OUTPUT_LAYER, value);
       } else {
-        GST_ERROR_OBJECT(object, "Output-layer can only be set in the NULL or READY states");
+        GST_ERROR_OBJECT(self, "Output-layer can only be set in the NULL or READY states");
       }
       break;
     }
     default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
+      G_OBJECT_WARN_INVALID_PROPERTY_ID(self, property_id, pspec);
       break;
   }
-  GST_OBJECT_UNLOCK(tens);
+  GST_OBJECT_UNLOCK(self);
 }
 
 void gst_tenserflow_backend_get_property(GObject* object, guint property_id, GValue* value, GParamSpec* pspec) {
-  GstTensorflow* tens = GST_TENSORFLOW(object);
+  GstTensorflow* self = GST_TENSORFLOW(object);
 
-  GST_OBJECT_LOCK(tens);
+  GST_OBJECT_LOCK(self);
   switch (property_id) {
     case PROP_INPUT: {
+      gst_backend_set_property(GST_BACKEND(self), INPUT_LAYER, value);
       break;
     }
     case PROP_OUTPUT: {
+      gst_backend_set_property(GST_BACKEND(self), OUTPUT_LAYER, value);
       break;
     }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
       break;
   }
-  GST_OBJECT_UNLOCK(tens);
+  GST_OBJECT_UNLOCK(self);
 }

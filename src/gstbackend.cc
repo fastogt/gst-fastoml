@@ -58,7 +58,7 @@ void gst_backend_set_property(GObject* object, guint property_id, const GValue* 
 
 void gst_backend_get_property(GObject* object, guint property_id, GValue* value, GParamSpec* pspec) {}
 
-gboolean gst_backend_start(GstBackend* self, GError** error) {
+gboolean gst_backend_start(GstBackend* self, const gchar* model_path, GError** error) {
   g_return_val_if_fail(error, FALSE);
 
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
@@ -66,7 +66,6 @@ gboolean gst_backend_start(GstBackend* self, GError** error) {
   fastoml::Backend* backend = priv->backend;
 
   g_return_val_if_fail(priv, FALSE);
-  g_return_val_if_fail(model_location, FALSE);
   g_return_val_if_fail(error, FALSE);
 
   if (backend) {
@@ -79,7 +78,7 @@ gboolean gst_backend_start(GstBackend* self, GError** error) {
     return FALSE;
   }
 
-  err = lbackend->LoadGraph(common::file_system::ascii_file_string_path(model_location));
+  err = lbackend->LoadGraph(common::file_system::ascii_file_string_path(model_path));
   if (err) {
     delete lbackend;
     GST_ERROR_OBJECT(self, "Failed to load model graph");
@@ -159,13 +158,6 @@ gboolean gst_backend_process_frame(GstBackend* self,
   return TRUE;
 }
 
-gboolean gst_backend_set_code(GstBackend* backend, GstMLBackends code) {
-  GstBackendPrivate* priv = GST_BACKEND_PRIVATE(backend);
-  g_return_val_if_fail(priv, FALSE);
-  priv->code = code;
-  return TRUE;
-}
-
 GstMLBackends gst_backend_get_code(GstBackend* backend) {
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(backend);
   g_return_val_if_fail(priv, GST_ML_BACKEND_TENSORFLOW);
@@ -182,4 +174,49 @@ GstBackend* gst_new_backend(GstMLBackends type) {
 
 void gst_free_backend(GstBackend* backend) {
   g_clear_object(&backend);
+}
+
+// subclass
+
+gboolean gst_backend_set_code(GstBackend* backend, GstMLBackends code) {
+  GstBackendPrivate* priv = GST_BACKEND_PRIVATE(backend);
+  g_return_val_if_fail(priv, FALSE);
+  priv->code = code;
+  return TRUE;
+}
+
+void gst_backend_set_property(GstBackend* backend, const gchar* property, const GValue* value) {
+  GstBackendPrivate* priv = GST_BACKEND_PRIVATE(backend);
+  g_return_if_fail(priv);
+  fastoml::Backend* back = priv->backend;
+  g_return_if_fail(back);
+
+  if (G_VALUE_TYPE(value) == G_TYPE_STRING) {
+    gchar* copy_value = g_value_dup_string(value);
+    common::Value* value = common::Value::CreateStringValueFromBasicString(copy_value);
+    back->SetProperty(property, value);
+    delete value;
+    g_free(copy_value);
+  }
+}
+
+void gst_backend_get_property(GstBackend* backend, const gchar* property, GValue* value) {
+  GstBackendPrivate* priv = GST_BACKEND_PRIVATE(backend);
+  g_return_if_fail(priv);
+  fastoml::Backend* back = priv->backend;
+  g_return_if_fail(back);
+
+  common::Value* cvalue = nullptr;
+  common::Error err = back->GetProperty(property, &cvalue);
+  if (err) {
+    return;
+  }
+
+  if (cvalue->GetType() == common::Value::TYPE_STRING) {
+    common::Value::string_t val;
+    if (cvalue->GetAsString(&val)) {
+      g_value_set_string(value, val.data());
+    }
+  }
+  delete cvalue;
 }

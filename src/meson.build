@@ -21,32 +21,10 @@ inc_fastoml = include_directories('/usr/local/include')
 lib_tensorflow = cc.find_library('tensorflow', dirs : ['/usr/local/lib'])
 inc_tensorflow = include_directories('/usr/local/include')
 
-backend_sources = [
-  'gstchildinspector.h',
-  'gstchildinspector.cc',
-  'gstinferencebackends.h',
-  'gstinferencebackends.cc',
-  'gstvideoinference.h',
-  'gstvideoinference.cc',
-  'gstbackend.h',
-  'gstbackend.cc',
-  'gstbackend_fwd.h',
-  'gsttensorflow.h',
-  'gsttensorflow.cc'
-]
-
-#backend = shared_library('backend',
-#  backend_sources,
-#  cpp_args: plugin_cpp_args,
-#  dependencies : [gst_dep, gstvideo_dep, lib_common, lib_fastoml, lib_tensorflow],
-#  include_directories : [inc_fastoml, inc_common, inc_tensorflow],
-#  install : true,
-#  install_dir : plugins_install_dir,
-#)
-
 yolov2_sources = [
   'gstbackend.h',
   'gstbackend.cc',
+  'gstbackend_subclass.h',
   'gsttensorflow.h',
   'gsttensorflow.cc',
   'gstinferencebackends.h',

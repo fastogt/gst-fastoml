@@ -13,14 +13,13 @@ struct _GstBackendClass {
   GObjectClass parent_class;
 };
 
-gboolean gst_backend_start(GstBackend*, GError**);
+gboolean gst_backend_start(GstBackend*, const gchar*, GError**);
 gboolean gst_backend_stop(GstBackend*, GError**);
 gboolean gst_backend_process_frame(GstBackend*, GstVideoFrame*, gpointer*, gsize*, GError**);
 
-gboolean gst_backend_set_code(GstBackend* backend, GstMLBackends code);  // protected
-GstMLBackends gst_backend_get_code(GstBackend* backend);
+GstMLBackends gst_backend_get_code(GstBackend*);
 
-GstBackend* gst_new_backend(GstMLBackends type);
-void gst_free_backend(GstBackend* backend);
+GstBackend* gst_new_backend(GstMLBackends);
+void gst_free_backend(GstBackend*);
 
 G_END_DECLS
