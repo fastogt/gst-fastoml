@@ -35,6 +35,14 @@ static GstStaticPadTemplate gst_video_balance_sink_template =
 
 static void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec);
 static void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec);
+static gboolean gst_video_set_info(GstVideoFilter* vfilter,
+                                   GstCaps* incaps,
+                                   GstVideoInfo* in_info,
+                                   GstCaps* outcaps,
+                                   GstVideoInfo* out_info);
+static GstFlowReturn gst_video_transform(GstVideoFilter* vfilter, GstVideoFrame* frame);
+static void gst_yolov2_init(GstYolov2* videobalance);
+static void gst_yolov2_finalize(GObject* object);
 
 #define gst_yolov2_parent_class parent_class
 G_DEFINE_TYPE_WITH_CODE(
@@ -43,17 +51,38 @@ G_DEFINE_TYPE_WITH_CODE(
     GST_TYPE_VIDEO_FILTER,
     GST_DEBUG_CATEGORY_INIT(videobalance_debug, PLUGIN_NAME, 0, "debug category for yolov2 element"));
 
+static void gst_yolov2_class_init(GstYolov2Class* klass) {
+  GObjectClass* gobject_class = (GObjectClass*)klass;
+  GstElementClass* gstelement_class = (GstElementClass*)klass;
+  GstVideoFilterClass* vfilter_class = (GstVideoFilterClass*)klass;
+
+  gobject_class->finalize = gst_yolov2_finalize;
+  gobject_class->set_property = gst_yolov2_set_property;
+  gobject_class->get_property = gst_yolov2_get_property;
+
+  gst_element_class_set_static_metadata(gstelement_class, "Video analitics", "Filter/Effect/Video", "Detect objects",
+                                        "Alexandr Topilski <support@fastotgt.com>");
+
+  gst_element_class_add_static_pad_template(gstelement_class, &gst_video_balance_sink_template);
+  gst_element_class_add_static_pad_template(gstelement_class, &gst_video_balance_src_template);
+
+  vfilter_class->set_info = GST_DEBUG_FUNCPTR(gst_video_set_info);
+  vfilter_class->transform_frame_ip = GST_DEBUG_FUNCPTR(gst_video_transform);
+}
+
+// implementation
+
 static void gst_video_balance_planar_yuv(GstYolov2* videobalance, GstVideoFrame* frame) {}
 static void gst_video_balance_semiplanar_yuv(GstYolov2* videobalance, GstVideoFrame* frame) {}
 static void gst_video_balance_packed_yuv(GstYolov2* videobalance, GstVideoFrame* frame) {}
 static void gst_video_balance_packed_rgb(GstYolov2* videobalance, GstVideoFrame* frame) {}
 
 /* get notified of caps and plug in the correct process function */
-static gboolean gst_video_balance_set_info(GstVideoFilter* vfilter,
-                                           GstCaps* incaps,
-                                           GstVideoInfo* in_info,
-                                           GstCaps* outcaps,
-                                           GstVideoInfo* out_info) {
+gboolean gst_video_set_info(GstVideoFilter* vfilter,
+                            GstCaps* incaps,
+                            GstVideoInfo* in_info,
+                            GstCaps* outcaps,
+                            GstVideoInfo* out_info) {
   GstYolov2* videobalance = GST_YOLOV2(vfilter);
 
   GST_DEBUG_OBJECT(videobalance, "in %" GST_PTR_FORMAT " out %" GST_PTR_FORMAT, incaps, outcaps);
@@ -104,52 +133,30 @@ unknown_format : {
 }
 }
 
-static GstFlowReturn gst_video_balance_transform_frame_ip(GstVideoFilter* vfilter, GstVideoFrame* frame) {
+GstFlowReturn gst_video_transform(GstVideoFilter* vfilter, GstVideoFrame* frame) {
   GstYolov2* videobalance = GST_YOLOV2(vfilter);
 
-  if (!videobalance->process)
-    goto not_negotiated;
+  if (!videobalance->process) {
+    GST_ERROR_OBJECT(videobalance, "Not negotiated yet");
+    return GST_FLOW_NOT_NEGOTIATED;
+  }
 
   GST_OBJECT_LOCK(videobalance);
   videobalance->process(videobalance, frame);
   GST_OBJECT_UNLOCK(videobalance);
-
   return GST_FLOW_OK;
-
-  /* ERRORS */
-not_negotiated : {
-  GST_ERROR_OBJECT(videobalance, "Not negotiated yet");
-  return GST_FLOW_NOT_NEGOTIATED;
-}
 }
 
-static void gst_yolov2_finalize(GObject* object) {
-  GstYolov2* balance = GST_YOLOV2(object);
+void gst_yolov2_init(GstYolov2* videobalance) {
+  videobalance->process = NULL;
+}
+
+void gst_yolov2_finalize(GObject* object) {
+  // GstYolov2* balance = GST_YOLOV2(object);
   G_OBJECT_CLASS(parent_class)->finalize(object);
 }
 
-static void gst_yolov2_class_init(GstYolov2Class* klass) {
-  GObjectClass* gobject_class = (GObjectClass*)klass;
-  GstElementClass* gstelement_class = (GstElementClass*)klass;
-  GstVideoFilterClass* vfilter_class = (GstVideoFilterClass*)klass;
-
-  gobject_class->finalize = gst_yolov2_finalize;
-  gobject_class->set_property = gst_yolov2_set_property;
-  gobject_class->get_property = gst_yolov2_get_property;
-
-  gst_element_class_set_static_metadata(gstelement_class, "Video analitics", "Filter/Effect/Video", "Detect objects",
-                                        "Alexandr Topilski <support@fastotgt.com>");
-
-  gst_element_class_add_static_pad_template(gstelement_class, &gst_video_balance_sink_template);
-  gst_element_class_add_static_pad_template(gstelement_class, &gst_video_balance_src_template);
-
-  vfilter_class->set_info = GST_DEBUG_FUNCPTR(gst_video_balance_set_info);
-  vfilter_class->transform_frame_ip = GST_DEBUG_FUNCPTR(gst_video_balance_transform_frame_ip);
-}
-
-static void gst_yolov2_init(GstYolov2* videobalance) {}
-
-static void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec) {
+void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec) {
   GstYolov2* balance = GST_YOLOV2(object);
   GST_OBJECT_LOCK(balance);
   switch (prop_id) {
@@ -157,17 +164,18 @@ static void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
       break;
   }
-
   GST_OBJECT_UNLOCK(balance);
 }
 
-static void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec) {
+void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec) {
   GstYolov2* balance = GST_YOLOV2(object);
+  GST_OBJECT_LOCK(balance);
   switch (prop_id) {
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
       break;
   }
+  GST_OBJECT_UNLOCK(balance);
 }
 
 static gboolean plugin_init(GstPlugin* plugin) {
