@@ -59,6 +59,8 @@ static GstFlowReturn gst_video_transform_frame(GstVideoFilter* filter,
                                                GstVideoFrame* out_frame);
 static void gst_yolov2_init(GstYolov2* self);
 static void gst_yolov2_finalize(GObject* object);
+static gboolean gst_yolov2_start(GstBaseTransform* trans);
+static gboolean gst_yolov2_stop(GstBaseTransform* trans);
 
 #define gst_yolov2_parent_class parent_class
 G_DEFINE_TYPE_WITH_CODE(
@@ -71,6 +73,7 @@ G_DEFINE_TYPE_WITH_CODE(
 static void gst_yolov2_class_init(GstYolov2Class* klass) {
   GObjectClass* gobject_class = (GObjectClass*)klass;
   GstElementClass* gstelement_class = (GstElementClass*)klass;
+  GstBaseTransformClass* trans_class = (GstBaseTransformClass*)klass;
   GstVideoFilterClass* vfilter_class = (GstVideoFilterClass*)klass;
 
   gobject_class->finalize = gst_yolov2_finalize;
@@ -90,6 +93,9 @@ static void gst_yolov2_class_init(GstYolov2Class* klass) {
 
   gst_element_class_add_static_pad_template(gstelement_class, &gst_video_balance_sink_template);
   gst_element_class_add_static_pad_template(gstelement_class, &gst_video_balance_src_template);
+
+  trans_class->start = GST_DEBUG_FUNCPTR(gst_yolov2_start);
+  trans_class->stop = GST_DEBUG_FUNCPTR(gst_yolov2_stop);
 
   vfilter_class->set_info = GST_DEBUG_FUNCPTR(gst_video_set_info);
   vfilter_class->transform_frame = GST_DEBUG_FUNCPTR(gst_video_transform_frame);
@@ -195,6 +201,14 @@ void gst_yolov2_finalize(GObject* object) {
   gst_free_backend(priv->backend);
   priv->backend = NULL;
   G_OBJECT_CLASS(parent_class)->finalize(object);
+}
+
+gboolean gst_yolov2_start(GstBaseTransform* trans) {
+  return TRUE;
+}
+
+gboolean gst_yolov2_stop(GstBaseTransform* trans) {
+  return TRUE;
 }
 
 void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec) {
