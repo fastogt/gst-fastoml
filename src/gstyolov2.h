@@ -23,7 +23,7 @@ typedef struct _GstYolov2Class GstYolov2Class;
  */
 struct _GstYolov2 {
   GstVideoFilter videofilter;
-  void (*process)(GstYolov2* balance, GstVideoFrame* frame);
+  void (*process)(GstYolov2* balance, GstVideoFrame* in_frame, GstVideoFrame* out_frame);
 };
 
 struct _GstYolov2Class {

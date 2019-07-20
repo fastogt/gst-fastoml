@@ -40,7 +40,9 @@ static gboolean gst_video_set_info(GstVideoFilter* vfilter,
                                    GstVideoInfo* in_info,
                                    GstCaps* outcaps,
                                    GstVideoInfo* out_info);
-static GstFlowReturn gst_video_transform(GstVideoFilter* vfilter, GstVideoFrame* frame);
+static GstFlowReturn gst_video_transform_frame(GstVideoFilter* filter,
+                                               GstVideoFrame* in_frame,
+                                               GstVideoFrame* out_frame);
 static void gst_yolov2_init(GstYolov2* videobalance);
 static void gst_yolov2_finalize(GObject* object);
 
@@ -67,15 +69,25 @@ static void gst_yolov2_class_init(GstYolov2Class* klass) {
   gst_element_class_add_static_pad_template(gstelement_class, &gst_video_balance_src_template);
 
   vfilter_class->set_info = GST_DEBUG_FUNCPTR(gst_video_set_info);
-  vfilter_class->transform_frame_ip = GST_DEBUG_FUNCPTR(gst_video_transform);
+  vfilter_class->transform_frame = GST_DEBUG_FUNCPTR(gst_video_transform_frame);
 }
 
 // implementation
 
-static void gst_video_balance_planar_yuv(GstYolov2* videobalance, GstVideoFrame* frame) {}
-static void gst_video_balance_semiplanar_yuv(GstYolov2* videobalance, GstVideoFrame* frame) {}
-static void gst_video_balance_packed_yuv(GstYolov2* videobalance, GstVideoFrame* frame) {}
-static void gst_video_balance_packed_rgb(GstYolov2* videobalance, GstVideoFrame* frame) {}
+static void gst_video_balance_planar_yuv(GstYolov2* videobalance, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
+  gst_video_frame_copy(out_frame, in_frame);
+}
+static void gst_video_balance_semiplanar_yuv(GstYolov2* videobalance,
+                                             GstVideoFrame* in_frame,
+                                             GstVideoFrame* out_frame) {
+  gst_video_frame_copy(out_frame, in_frame);
+}
+static void gst_video_balance_packed_yuv(GstYolov2* videobalance, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
+  gst_video_frame_copy(out_frame, in_frame);
+}
+static void gst_video_balance_packed_rgb(GstYolov2* videobalance, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
+  gst_video_frame_copy(out_frame, in_frame);
+}
 
 /* get notified of caps and plug in the correct process function */
 gboolean gst_video_set_info(GstVideoFilter* vfilter,
@@ -133,17 +145,16 @@ unknown_format : {
 }
 }
 
-GstFlowReturn gst_video_transform(GstVideoFilter* vfilter, GstVideoFrame* frame) {
+GstFlowReturn gst_video_transform_frame(GstVideoFilter* vfilter, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
   GstYolov2* videobalance = GST_YOLOV2(vfilter);
-
   if (!videobalance->process) {
     GST_ERROR_OBJECT(videobalance, "Not negotiated yet");
     return GST_FLOW_NOT_NEGOTIATED;
   }
 
-  GST_OBJECT_LOCK(videobalance);
-  videobalance->process(videobalance, frame);
-  GST_OBJECT_UNLOCK(videobalance);
+  // GST_OBJECT_LOCK(videobalance);
+  videobalance->process(videobalance, in_frame, out_frame);
+  // GST_OBJECT_UNLOCK(videobalance);
   return GST_FLOW_OK;
 }
 
