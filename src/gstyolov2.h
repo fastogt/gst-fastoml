@@ -23,14 +23,6 @@ typedef struct _GstYolov2Class GstYolov2Class;
  */
 struct _GstYolov2 {
   GstVideoFilter videofilter;
-
-  /* < private > */
-
-  /* tables */
-  guint8 tabley[256];
-  guint8* tableu[256];
-  guint8* tablev[256];
-
   void (*process)(GstYolov2* balance, GstVideoFrame* frame);
 };
 
