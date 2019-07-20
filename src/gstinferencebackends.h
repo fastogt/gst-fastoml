@@ -1,16 +1,12 @@
-#ifndef __GST_INFERENCE_BACKENDS_H__
-#define __GST_INFERENCE_BACKENDS_H__
+#pragma once
 
 #include <gst/gst.h>
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_INFERENCE_BACKENDS (gst_inference_backends_get_type())
+typedef enum { GST_ML_BACKEND_TENSORFLOW = 0 } GstMLBackends;
+#define GST_TYPE_ML_BACKEND (gst_ml_backend_get_type())
 
-GType gst_inference_backends_get_type(void);
-gchar* gst_inference_backends_get_string_properties(void);
-guint16 gst_inference_backends_get_default_backend(void);
-GType gst_inference_backends_search_type(guint);
+GType gst_ml_backend_get_type(void);
 
 G_END_DECLS
-#endif  //__GST_INFERENCE_BACKENDS_H__

@@ -35,16 +35,23 @@ backend_sources = [
   'gsttensorflow.cc'
 ]
 
-backend = shared_library('backend',
-  backend_sources,
-  cpp_args: plugin_cpp_args,
-  dependencies : [gst_dep, gstvideo_dep, lib_common, lib_fastoml, lib_tensorflow],
-  include_directories : [inc_fastoml, inc_common, inc_tensorflow],
-  install : true,
-  install_dir : plugins_install_dir,
-)
+#backend = shared_library('backend',
+#  backend_sources,
+#  cpp_args: plugin_cpp_args,
+#  dependencies : [gst_dep, gstvideo_dep, lib_common, lib_fastoml, lib_tensorflow],
+#  include_directories : [inc_fastoml, inc_common, inc_tensorflow],
+#  install : true,
+#  install_dir : plugins_install_dir,
+#)
 
 yolov2_sources = [
+  'gstbackend.h',
+  'gstbackend.cc',
+  'gsttensorflow.h',
+  'gsttensorflow.cc',
+  'gstinferencebackends.h',
+  'gstinferencebackends.cc',
+
   'gstyolov2.h',
   'gstyolov2.cc'
 ]
@@ -52,8 +59,8 @@ yolov2_sources = [
 yolov2 = shared_library('yolov2',
   yolov2_sources,
   cpp_args: plugin_cpp_args,
-  dependencies : [gst_dep, gstvideo_dep],
-  include_directories : [],
+  dependencies : [gst_dep, gstvideo_dep, lib_common, lib_fastoml, lib_tensorflow],
+  include_directories : [inc_fastoml, inc_common, inc_tensorflow],
   install : true,
   install_dir : plugins_install_dir,
 )

@@ -1,5 +1,4 @@
-#ifndef __GST_VIDEO_BALANCE_H__
-#define __GST_VIDEO_BALANCE_H__
+#pragma once
 
 #include <gst/gst.h>
 #include <gst/video/gstvideofilter.h>
@@ -33,5 +32,3 @@ struct _GstYolov2Class {
 GType gst_yolov2_get_type(void);
 
 G_END_DECLS
-
-#endif /* __GST_VIDEO_BALANCE_H__ */

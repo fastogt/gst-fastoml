@@ -5,14 +5,28 @@
 #include <gst/math-compat.h>
 
 #include <string.h>
+
+#include "gstbackend.h"
+#include "gstinferencebackends.h"
 #include "gstyolov2.h"
 
 #define PLUGIN_NAME "yolov2"
 
+#define DEFAULT_PROP_BACKEND GST_ML_BACKEND_TENSORFLOW
+#define DEFAULT_PROP_MODEL NULL
+
 GST_DEBUG_CATEGORY_STATIC(videobalance_debug);
 #define GST_CAT_DEFAULT videobalance_debug
 
-enum { PROP_0 };
+enum { PROP_0, PROP_BACKEND, PROP_MODEL };
+
+typedef struct _GstYolov2Private GstYolov2Private;
+struct _GstYolov2Private {
+  GstBackend* backend;
+  gchar* model;
+};
+
+#define GST_YOLOV2_PRIVATE(self) (GstYolov2Private*)(gst_yolov2_get_instance_private(self))
 
 #define PROCESSING_CAPS                                \
   "{ AYUV, ARGB, BGRA, ABGR, RGBA, Y444, xRGB, RGBx, " \
@@ -43,7 +57,7 @@ static gboolean gst_video_set_info(GstVideoFilter* vfilter,
 static GstFlowReturn gst_video_transform_frame(GstVideoFilter* filter,
                                                GstVideoFrame* in_frame,
                                                GstVideoFrame* out_frame);
-static void gst_yolov2_init(GstYolov2* videobalance);
+static void gst_yolov2_init(GstYolov2* self);
 static void gst_yolov2_finalize(GObject* object);
 
 #define gst_yolov2_parent_class parent_class
@@ -51,7 +65,8 @@ G_DEFINE_TYPE_WITH_CODE(
     GstYolov2,
     gst_yolov2,
     GST_TYPE_VIDEO_FILTER,
-    GST_DEBUG_CATEGORY_INIT(videobalance_debug, PLUGIN_NAME, 0, "debug category for yolov2 element"));
+    GST_DEBUG_CATEGORY_INIT(videobalance_debug, PLUGIN_NAME, 0, "debug category for yolov2 element");
+    G_ADD_PRIVATE(GstYolov2));
 
 static void gst_yolov2_class_init(GstYolov2Class* klass) {
   GObjectClass* gobject_class = (GObjectClass*)klass;
@@ -61,6 +76,14 @@ static void gst_yolov2_class_init(GstYolov2Class* klass) {
   gobject_class->finalize = gst_yolov2_finalize;
   gobject_class->set_property = gst_yolov2_set_property;
   gobject_class->get_property = gst_yolov2_get_property;
+
+  g_object_class_install_property(
+      gobject_class, PROP_BACKEND,
+      g_param_spec_enum("backend", "backend", "ML backend", GST_TYPE_ML_BACKEND, DEFAULT_PROP_BACKEND,
+                        GParamFlags(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+  g_object_class_install_property(gobject_class, PROP_MODEL,
+                                  g_param_spec_string("model", "model", "Graph model path", DEFAULT_PROP_MODEL,
+                                                      GParamFlags(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
   gst_element_class_set_static_metadata(gstelement_class, "Video analitics", "Filter/Effect/Video", "Detect objects",
                                         "Alexandr Topilski <support@fastotgt.com>");
@@ -132,17 +155,11 @@ gboolean gst_video_set_info(GstVideoFilter* vfilter,
       videobalance->process = gst_video_balance_packed_rgb;
       break;
     default:
-      goto unknown_format;
-      break;
+      GST_ERROR_OBJECT(videobalance, "unknown format %" GST_PTR_FORMAT, incaps);
+      return FALSE;
   }
 
   return TRUE;
-
-  /* ERRORS */
-unknown_format : {
-  GST_ERROR_OBJECT(videobalance, "unknown format %" GST_PTR_FORMAT, incaps);
-  return FALSE;
-}
 }
 
 GstFlowReturn gst_video_transform_frame(GstVideoFilter* vfilter, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
@@ -158,30 +175,77 @@ GstFlowReturn gst_video_transform_frame(GstVideoFilter* vfilter, GstVideoFrame* 
   return GST_FLOW_OK;
 }
 
-void gst_yolov2_init(GstYolov2* videobalance) {
-  videobalance->process = NULL;
+void gst_yolov2_init(GstYolov2* self) {
+  GstYolov2Private* priv = GST_YOLOV2_PRIVATE(self);
+
+  self->process = NULL;
+  priv->backend = gst_new_backend(DEFAULT_PROP_BACKEND);
+  priv->model = g_strdup(DEFAULT_PROP_MODEL);
 }
 
 void gst_yolov2_finalize(GObject* object) {
-  // GstYolov2* balance = GST_YOLOV2(object);
+  GstYolov2* balance = GST_YOLOV2(object);
+  GstYolov2Private* priv = GST_YOLOV2_PRIVATE(balance);
+
+  balance->process = NULL;
+
+  g_free(priv->model);
+  priv->model = NULL;
+
+  gst_free_backend(priv->backend);
+  priv->backend = NULL;
   G_OBJECT_CLASS(parent_class)->finalize(object);
 }
 
 void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec) {
-  GstYolov2* balance = GST_YOLOV2(object);
-  GST_OBJECT_LOCK(balance);
+  GstYolov2* self = GST_YOLOV2(object);
+  GstYolov2Private* priv = GST_YOLOV2_PRIVATE(self);
+
+  GST_OBJECT_LOCK(self);
   switch (prop_id) {
+    case PROP_BACKEND: {
+      GstState actual_state;
+      gst_element_get_state(GST_ELEMENT(self), &actual_state, NULL, GST_SECOND);
+      if (actual_state <= GST_STATE_READY) {
+        gst_free_backend(priv->backend);
+        priv->backend = gst_new_backend((GstMLBackends)(g_value_get_enum(value)));
+      } else {
+        GST_ERROR_OBJECT(self, "Backend can only be set in the NULL or READY states");
+      }
+      break;
+    }
+    case PROP_MODEL: {
+      GstState actual_state;
+      gst_element_get_state(GST_ELEMENT(self), &actual_state, NULL, GST_SECOND);
+      if (actual_state <= GST_STATE_READY) {
+        g_free(priv->model);
+        priv->model = g_value_dup_string(value);
+      } else {
+        GST_ERROR_OBJECT(self, "Model location can only be set in the NULL or READY states");
+      }
+      break;
+    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
       break;
   }
-  GST_OBJECT_UNLOCK(balance);
+  GST_OBJECT_UNLOCK(self);
 }
 
 void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec) {
   GstYolov2* balance = GST_YOLOV2(object);
+  GstYolov2Private* priv = GST_YOLOV2_PRIVATE(balance);
+
   GST_OBJECT_LOCK(balance);
   switch (prop_id) {
+    case PROP_BACKEND: {
+      g_value_set_enum(value, gst_backend_get_code(priv->backend));
+      break;
+    }
+    case PROP_MODEL: {
+      g_value_set_string(value, priv->model);
+      break;
+    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
       break;
