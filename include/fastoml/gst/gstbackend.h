@@ -1,9 +1,8 @@
 #pragma once
 
-#include <gst/gst.h>
 #include <gst/video/video.h>
 
-#include "gstinferencebackends.h"
+#include <fastoml/gst/gstinferencebackends.h>
 
 G_BEGIN_DECLS
 #define GST_TYPE_BACKEND gst_backend_get_type()

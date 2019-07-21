@@ -1,4 +1,4 @@
-#include "gstinferencebackends.h"
+#include <fastoml/gst/gstinferencebackends.h>
 
 GType gst_ml_backend_get_type(void) {
   static GType ml_type = 0;

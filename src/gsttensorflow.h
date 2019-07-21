@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gstbackend.h"
+#include <fastoml/gst/gstbackend.h>
 
 G_BEGIN_DECLS
 

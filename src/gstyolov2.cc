@@ -2,13 +2,14 @@
 #include "config.h"
 #endif
 
+#include "gstyolov2.h"
+
 #include <gst/math-compat.h>
 
 #include <string.h>
 
-#include "gstbackend.h"
-#include "gstinferencebackends.h"
-#include "gstyolov2.h"
+#include <fastoml/gst/gstbackend.h>
+#include <fastoml/gst/gstinferencebackends.h>
 
 #define PLUGIN_NAME "yolov2"
 

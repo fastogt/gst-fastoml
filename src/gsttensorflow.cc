@@ -1,6 +1,6 @@
 #include "gsttensorflow.h"
 
-#include "gstbackend_subclass.h"
+#include <fastoml/gst/gstbackend_subclass.h>
 
 GST_DEBUG_CATEGORY_STATIC(gst_tensorflow_debug_category);
 #define GST_CAT_DEFAULT gst_tensorflow_debug_category

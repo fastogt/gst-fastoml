@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gstbackend.h"
+#include <fastoml/gst/gstbackend.h>
 
 gboolean gst_backend_set_code(GstBackend* backend, GstMLBackends code);
 
