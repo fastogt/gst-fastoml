@@ -1,4 +1,4 @@
-#include "gsttensorflow.h"
+#include <fastoml/gst/gsttensorflow.h>
 
 #include <fastoml/gst/gstbackend_subclass.h>
 
@@ -46,9 +46,7 @@ static void gst_tensorflow_class_init(GstTensorflowClass* klass) {
                                                       GParamFlags(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 }
 
-static void gst_tensorflow_init(GstTensorflow* self) {
-  gst_backend_set_code(GST_BACKEND(self), GST_ML_BACKEND_TENSORFLOW);
-}
+static void gst_tensorflow_init(GstTensorflow* self) {}
 
 void gst_tenserflow_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec) {
   GstTensorflow* self = GST_TENSORFLOW(object);

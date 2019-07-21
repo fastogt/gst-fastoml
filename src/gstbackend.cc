@@ -6,7 +6,7 @@
 #include <fastoml/backend.h>
 
 // implementations
-#include "gsttensorflow.h"
+#include <fastoml/gst/gsttensorflow.h>
 
 GST_DEBUG_CATEGORY_STATIC(gst_backend_debug_category);
 #define GST_CAT_DEFAULT gst_backend_debug_category
@@ -17,7 +17,6 @@ enum { PROP_0, PROP_MODEL };
 
 typedef struct _GstBackendPrivate GstBackendPrivate;
 struct _GstBackendPrivate {
-  GstMLBackends code;
   fastoml::Backend* backend;
   gchar* model;
 };
@@ -54,7 +53,6 @@ static void gst_backend_class_init(GstBackendClass* klass) {
 
 void gst_backend_init(GstBackend* self) {
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
-  priv->code = GST_ML_BACKEND_TENSORFLOW;
   priv->model = g_strdup(DEFAULT_PROP_MODEL);
 }
 
@@ -114,8 +112,8 @@ gboolean gst_backend_start(GstBackend* self, GError** error) {
   g_return_val_if_fail(priv->model, FALSE);
 
   fastoml::Backend* lbackend = nullptr;
-  common::ErrnoError err =
-      fastoml::Backend::MakeBackEnd(static_cast<fastoml::SupportedBackends>(priv->code), &lbackend);
+  fastoml::SupportedBackends type;
+  common::ErrnoError err = fastoml::Backend::MakeBackEnd(type, &lbackend);
   if (err) {
     g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to create backend");
     return FALSE;
@@ -206,14 +204,8 @@ gboolean gst_backend_process_frame(GstBackend* self,
   return TRUE;
 }
 
-GstMLBackends gst_backend_get_code(GstBackend* backend) {
-  GstBackendPrivate* priv = GST_BACKEND_PRIVATE(backend);
-  g_return_val_if_fail(priv, GST_ML_BACKEND_TENSORFLOW);
-  return priv->code;
-}
-
-GstBackend* gst_new_backend(GstMLBackends type) {
-  if (type == GST_ML_BACKEND_TENSORFLOW) {
+GstBackend* gst_new_backend(fastoml::SupportedBackends code) {
+  if (code == fastoml::TENSORFLOW) {
     return (GstBackend*)g_object_new(GST_TYPE_TENSORFLOW, NULL);
   }
 
@@ -224,14 +216,15 @@ void gst_free_backend(GstBackend* backend) {
   g_clear_object(&backend);
 }
 
-// subclass
-
-gboolean gst_backend_set_code(GstBackend* backend, GstMLBackends code) {
-  GstBackendPrivate* priv = GST_BACKEND_PRIVATE(backend);
-  g_return_val_if_fail(priv, FALSE);
-  priv->code = code;
-  return TRUE;
+GQuark gst_backend_error_quark(void) {
+  static GQuark q = 0;
+  if (0 == q) {
+    q = g_quark_from_static_string("gst-backend-error-quark");
+  }
+  return q;
 }
+
+// subclass
 
 void gst_backend_set_property(GstBackend* backend, const gchar* property, const GValue* value) {
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(backend);
@@ -267,12 +260,4 @@ void gst_backend_get_property(GstBackend* backend, const gchar* property, GValue
     }
   }
   delete cvalue;
-}
-
-GQuark gst_backend_error_quark(void) {
-  static GQuark q = 0;
-  if (0 == q) {
-    q = g_quark_from_static_string("gst-backend-error-quark");
-  }
-  return q;
 }

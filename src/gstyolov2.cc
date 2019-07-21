@@ -3,17 +3,12 @@
 #endif
 
 #include "gstyolov2.h"
-
-#include <gst/math-compat.h>
-
-#include <string.h>
-
 #include <fastoml/gst/gstbackend.h>
-#include <fastoml/gst/gstinferencebackends.h>
 
 #define PLUGIN_NAME "yolov2"
+#define PLUGIN_DESCRIPTION "FastoGT yolov2 plugin"
 
-#define DEFAULT_PROP_BACKEND GST_ML_BACKEND_TENSORFLOW
+#define DEFAULT_PROP_BACKEND fastoml::TENSORFLOW
 
 GST_DEBUG_CATEGORY_STATIC(videobalance_debug);
 #define GST_CAT_DEFAULT videobalance_debug
@@ -282,5 +277,5 @@ GST_PLUGIN_DEFINE(GST_VERSION_MAJOR,
                   plugin_init,
                   PACKAGE_VERSION,
                   GST_LICENSE,
-                  GST_PACKAGE_NAME,
+                  PLUGIN_DESCRIPTION,
                   GST_PACKAGE_ORIGIN)
