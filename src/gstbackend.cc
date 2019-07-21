@@ -11,12 +11,15 @@
 GST_DEBUG_CATEGORY_STATIC(gst_backend_debug_category);
 #define GST_CAT_DEFAULT gst_backend_debug_category
 
+#define DEFAULT_PROP_MODEL NULL
+
 enum { PROP_0, PROP_MODEL };
 
 typedef struct _GstBackendPrivate GstBackendPrivate;
 struct _GstBackendPrivate {
   GstMLBackends code;
   fastoml::Backend* backend;
+  gchar* model;
 };
 
 G_DEFINE_TYPE_WITH_CODE(
@@ -37,29 +40,64 @@ static void gst_backend_get_property(GObject* object, guint property_id, GValue*
 #define GST_BACKEND_ERROR gst_backend_error_quark()
 
 static void gst_backend_class_init(GstBackendClass* klass) {
-  GObjectClass* oclass = G_OBJECT_CLASS(klass);
+  GObjectClass* gobject_class = G_OBJECT_CLASS(klass);
 
-  oclass->set_property = gst_backend_set_property;
-  oclass->get_property = gst_backend_get_property;
-  oclass->finalize = gst_backend_finalize;
+  gobject_class->set_property = gst_backend_set_property;
+  gobject_class->get_property = gst_backend_get_property;
+
+  g_object_class_install_property(gobject_class, PROP_MODEL,
+                                  g_param_spec_string("model", "model", "Graph model path", DEFAULT_PROP_MODEL,
+                                                      GParamFlags(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
+  gobject_class->finalize = gst_backend_finalize;
 }
 
 void gst_backend_init(GstBackend* self) {
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
   priv->code = GST_ML_BACKEND_TENSORFLOW;
+  priv->model = g_strdup(DEFAULT_PROP_MODEL);
 }
 
-void gst_backend_finalize(GObject* obj) {
-  GstBackend* self = GST_BACKEND(obj);
-  // GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
-  G_OBJECT_CLASS(gst_backend_parent_class)->finalize(obj);
+void gst_backend_finalize(GObject* object) {
+  GstBackend* self = GST_BACKEND(object);
+  GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
+  g_free(priv->model);
+  priv->model = NULL;
+  G_OBJECT_CLASS(gst_backend_parent_class)->finalize(object);
 }
 
-void gst_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec) {}
+void gst_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec) {
+  GstBackend* self = GST_BACKEND(object);
+  GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
 
-void gst_backend_get_property(GObject* object, guint property_id, GValue* value, GParamSpec* pspec) {}
+  switch (property_id) {
+    case PROP_MODEL: {
+      g_free(priv->model);
+      priv->model = g_value_dup_string(value);
+      break;
+    }
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
+      break;
+  }
+}
 
-gboolean gst_backend_start(GstBackend* self, const gchar* model_path, GError** error) {
+void gst_backend_get_property(GObject* object, guint property_id, GValue* value, GParamSpec* pspec) {
+  GstBackend* self = GST_BACKEND(object);
+  GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
+
+  switch (property_id) {
+    case PROP_MODEL: {
+      g_value_set_string(value, priv->model);
+      break;
+    }
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
+      break;
+  }
+}
+
+gboolean gst_backend_start(GstBackend* self, GError** error) {
   g_return_val_if_fail(error, FALSE);
 
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
@@ -73,6 +111,8 @@ gboolean gst_backend_start(GstBackend* self, const gchar* model_path, GError** e
     return TRUE;
   }
 
+  g_return_val_if_fail(priv->model, FALSE);
+
   fastoml::Backend* lbackend = nullptr;
   common::ErrnoError err =
       fastoml::Backend::MakeBackEnd(static_cast<fastoml::SupportedBackends>(priv->code), &lbackend);
@@ -81,7 +121,7 @@ gboolean gst_backend_start(GstBackend* self, const gchar* model_path, GError** e
     return FALSE;
   }
 
-  err = lbackend->LoadGraph(common::file_system::ascii_file_string_path(model_path));
+  err = lbackend->LoadGraph(common::file_system::ascii_file_string_path(priv->model));
   if (err) {
     delete lbackend;
     g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to load model graph");

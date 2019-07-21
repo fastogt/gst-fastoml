@@ -13,7 +13,7 @@ struct _GstBackendClass {
   GObjectClass parent_class;
 };
 
-gboolean gst_backend_start(GstBackend*, const gchar*, GError**);
+gboolean gst_backend_start(GstBackend*, GError**);
 gboolean gst_backend_stop(GstBackend*, GError**);
 gboolean gst_backend_process_frame(GstBackend*, GstVideoFrame*, gpointer*, gsize*, GError**);
 

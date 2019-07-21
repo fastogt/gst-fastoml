@@ -53,7 +53,6 @@ static void gst_tensorflow_init(GstTensorflow* self) {
 void gst_tenserflow_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec) {
   GstTensorflow* self = GST_TENSORFLOW(object);
 
-  GST_OBJECT_LOCK(self);
   switch (property_id) {
     case PROP_INPUT: {
       GstState actual_state;
@@ -79,13 +78,11 @@ void gst_tenserflow_backend_set_property(GObject* object, guint property_id, con
       G_OBJECT_WARN_INVALID_PROPERTY_ID(self, property_id, pspec);
       break;
   }
-  GST_OBJECT_UNLOCK(self);
 }
 
 void gst_tenserflow_backend_get_property(GObject* object, guint property_id, GValue* value, GParamSpec* pspec) {
   GstTensorflow* self = GST_TENSORFLOW(object);
 
-  GST_OBJECT_LOCK(self);
   switch (property_id) {
     case PROP_INPUT: {
       gst_backend_set_property(GST_BACKEND(self), INPUT_LAYER, value);
@@ -99,5 +96,4 @@ void gst_tenserflow_backend_get_property(GObject* object, guint property_id, GVa
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
       break;
   }
-  GST_OBJECT_UNLOCK(self);
 }
