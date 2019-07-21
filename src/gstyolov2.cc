@@ -206,7 +206,6 @@ void gst_yolov2_finalize(GObject* object) {
 gboolean gst_yolov2_start(GstBaseTransform* trans) {
   GstYolov2* self = GST_YOLOV2(trans);
   GstYolov2Private* priv = GST_YOLOV2_PRIVATE(self);
-  printf("1\n");
   if (!priv->backend) {
     return FALSE;
   }
