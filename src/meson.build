@@ -15,7 +15,7 @@ backends_sources = [
   'gsttensorflow.cc',
 ]
 
-backends = shared_library('fasto_ml_backends',
+backends = shared_library('fastoml_backends',
   [backends_sources],
   dependencies : [gst_dep, gstvideo_dep, lib_common, lib_fastoml, lib_tensorflow],
   include_directories : [inc_fastoml, inc_common, inc_tensorflow, public_incdir],
