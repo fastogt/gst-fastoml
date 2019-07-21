@@ -204,10 +204,38 @@ void gst_yolov2_finalize(GObject* object) {
 }
 
 gboolean gst_yolov2_start(GstBaseTransform* trans) {
+  GstYolov2* self = GST_YOLOV2(trans);
+  GstYolov2Private* priv = GST_YOLOV2_PRIVATE(self);
+  printf("1\n");
+  if (!priv->backend) {
+    return FALSE;
+  }
+
+  if (!priv->model) {
+    return FALSE;
+  }
+
+  GError* err = NULL;
+  if (!gst_backend_start(priv->backend, priv->model, &err)) {
+    g_error_free(err);
+    return FALSE;
+  }
+
   return TRUE;
 }
 
 gboolean gst_yolov2_stop(GstBaseTransform* trans) {
+  GstYolov2* self = GST_YOLOV2(trans);
+  GstYolov2Private* priv = GST_YOLOV2_PRIVATE(self);
+  if (!priv->backend) {
+    return FALSE;
+  }
+
+  GError* err = NULL;
+  if (!gst_backend_stop(priv->backend, &err)) {
+    g_error_free(err);
+    return FALSE;
+  }
   return TRUE;
 }
 
@@ -218,25 +246,13 @@ void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value
   GST_OBJECT_LOCK(self);
   switch (prop_id) {
     case PROP_BACKEND: {
-      GstState actual_state;
-      gst_element_get_state(GST_ELEMENT(self), &actual_state, NULL, GST_SECOND);
-      if (actual_state <= GST_STATE_READY) {
-        gst_free_backend(priv->backend);
-        priv->backend = gst_new_backend((GstMLBackends)(g_value_get_enum(value)));
-      } else {
-        GST_ERROR_OBJECT(self, "Backend can only be set in the NULL or READY states");
-      }
+      gst_free_backend(priv->backend);
+      priv->backend = gst_new_backend((GstMLBackends)(g_value_get_enum(value)));
       break;
     }
     case PROP_MODEL: {
-      GstState actual_state;
-      gst_element_get_state(GST_ELEMENT(self), &actual_state, NULL, GST_SECOND);
-      if (actual_state <= GST_STATE_READY) {
-        g_free(priv->model);
-        priv->model = g_value_dup_string(value);
-      } else {
-        GST_ERROR_OBJECT(self, "Model location can only be set in the NULL or READY states");
-      }
+      g_free(priv->model);
+      priv->model = g_value_dup_string(value);
       break;
     }
     default:

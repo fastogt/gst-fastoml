@@ -28,6 +28,7 @@ G_DEFINE_TYPE_WITH_CODE(
 
 #define GST_BACKEND_PRIVATE(self) (GstBackendPrivate*)(gst_backend_get_instance_private(self))
 
+static GQuark gst_backend_error_quark(void);
 static void gst_backend_init(GstBackend* self);
 static void gst_backend_finalize(GObject* obj);
 static void gst_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec);
@@ -73,14 +74,17 @@ gboolean gst_backend_start(GstBackend* self, const gchar* model_path, GError** e
   }
 
   fastoml::Backend* lbackend = nullptr;
-  common::Error err = fastoml::Backend::MakeBackEnd(static_cast<fastoml::SupportedBackends>(priv->code), &lbackend);
+  common::ErrnoError err =
+      fastoml::Backend::MakeBackEnd(static_cast<fastoml::SupportedBackends>(priv->code), &lbackend);
   if (err) {
+    g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to create backend");
     return FALSE;
   }
 
   err = lbackend->LoadGraph(common::file_system::ascii_file_string_path(model_path));
   if (err) {
     delete lbackend;
+    g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to load model graph");
     GST_ERROR_OBJECT(self, "Failed to load model graph");
     return FALSE;
   }
@@ -88,6 +92,7 @@ gboolean gst_backend_start(GstBackend* self, const gchar* model_path, GError** e
   err = lbackend->Start();
   if (err) {
     delete lbackend;
+    g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to start the backend engine");
     GST_ERROR_OBJECT(self, "Failed to start the backend engine");
     return FALSE;
   }
@@ -104,8 +109,9 @@ gboolean gst_backend_stop(GstBackend* self, GError** error) {
   fastoml::Backend* backend = priv->backend;
   g_return_val_if_fail(backend, FALSE);
 
-  common::Error err = backend->Stop();
+  common::ErrnoError err = backend->Stop();
   if (err) {
+    g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to stop the backend engine");
     GST_ERROR_OBJECT(self, "Failed to stop the backend engine");
     return FALSE;
   }
@@ -133,8 +139,9 @@ gboolean gst_backend_process_frame(GstBackend* self,
   fastoml::IFrame* frame = nullptr;
   common::draw::Size size(input_frame->info.width, input_frame->info.height);
   GST_LOG_OBJECT(self, "Processing Frame of size %d x %d", input_frame->info.width, input_frame->info.height);
-  common::Error err = backend->MakeFrame(size, fastoml::ImageFormat::RGB, input_frame->data, &frame);
+  common::ErrnoError err = backend->MakeFrame(size, fastoml::ImageFormat::RGB, input_frame->data, &frame);
   if (err) {
+    g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to create frame");
     return FALSE;
   }
 
@@ -142,6 +149,7 @@ gboolean gst_backend_process_frame(GstBackend* self,
   err = backend->Predict(frame, &prediction);
   if (err) {
     delete frame;
+    g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to predict");
     return FALSE;
   }
 
@@ -207,7 +215,7 @@ void gst_backend_get_property(GstBackend* backend, const gchar* property, GValue
   g_return_if_fail(back);
 
   common::Value* cvalue = nullptr;
-  common::Error err = back->GetProperty(property, &cvalue);
+  common::ErrnoError err = back->GetProperty(property, &cvalue);
   if (err) {
     return;
   }
@@ -219,4 +227,12 @@ void gst_backend_get_property(GstBackend* backend, const gchar* property, GValue
     }
   }
   delete cvalue;
+}
+
+GQuark gst_backend_error_quark(void) {
+  static GQuark q = 0;
+  if (0 == q) {
+    q = g_quark_from_static_string("gst-backend-error-quark");
+  }
+  return q;
 }
