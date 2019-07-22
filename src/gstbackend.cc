@@ -99,8 +99,17 @@ gboolean gst_backend_start(GstBackend* self, GError** error) {
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
   g_return_val_if_fail(priv, FALSE);
   fastoml::Backend* backend = priv->backend;
-  g_return_val_if_fail(backend, FALSE);
-  g_return_val_if_fail(priv->model, FALSE);
+  if (!backend) {
+    g_set_error(error, GST_BACKEND_ERROR, EINVAL, "Backend not set");
+    GST_ERROR_OBJECT(self, "Backend not set");
+    return FALSE;
+  }
+
+  if (!priv->model) {
+    g_set_error(error, GST_BACKEND_ERROR, EINVAL, "Model path empty");
+    GST_ERROR_OBJECT(self, "Model path empty");
+    return FALSE;
+  }
 
   common::ErrnoError err = backend->LoadGraph(common::file_system::ascii_file_string_path(priv->model));
   if (err) {
@@ -125,7 +134,11 @@ gboolean gst_backend_stop(GstBackend* self, GError** error) {
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
   g_return_val_if_fail(priv, FALSE);
   fastoml::Backend* backend = priv->backend;
-  g_return_val_if_fail(backend, FALSE);
+  if (!backend) {
+    g_set_error(error, GST_BACKEND_ERROR, EINVAL, "Backend not set");
+    GST_ERROR_OBJECT(self, "Backend not set");
+    return FALSE;
+  }
 
   common::ErrnoError err = backend->Stop();
   if (err) {
