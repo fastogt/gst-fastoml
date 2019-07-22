@@ -46,30 +46,20 @@ static void gst_tensorflow_class_init(GstTensorflowClass* klass) {
                                                       GParamFlags(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 }
 
-static void gst_tensorflow_init(GstTensorflow* self) {}
+static void gst_tensorflow_init(GstTensorflow* self) {
+  gst_backend_set_code(GST_BACKEND(self), fastoml::TENSORFLOW);
+}
 
 void gst_tenserflow_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec) {
   GstTensorflow* self = GST_TENSORFLOW(object);
 
   switch (property_id) {
     case PROP_INPUT: {
-      GstState actual_state;
-      gst_element_get_state(GST_ELEMENT(self), &actual_state, NULL, GST_SECOND);
-      if (actual_state <= GST_STATE_READY) {
-        gst_backend_set_property(GST_BACKEND(self), INPUT_LAYER, value);
-      } else {
-        GST_ERROR_OBJECT(object, "Input-layer can only be set in the NULL or READY states");
-      }
+      gst_backend_set_property(GST_BACKEND(self), INPUT_LAYER, value);
       break;
     }
     case PROP_OUTPUT: {
-      GstState actual_state;
-      gst_element_get_state(GST_ELEMENT(self), &actual_state, NULL, GST_SECOND);
-      if (actual_state <= GST_STATE_READY) {
-        gst_backend_set_property(GST_BACKEND(self), OUTPUT_LAYER, value);
-      } else {
-        GST_ERROR_OBJECT(self, "Output-layer can only be set in the NULL or READY states");
-      }
+      gst_backend_set_property(GST_BACKEND(self), OUTPUT_LAYER, value);
       break;
     }
     default:

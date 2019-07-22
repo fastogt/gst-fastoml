@@ -20,7 +20,7 @@ backends = shared_library('fastoml_backends',
   dependencies : [gst_dep, gstvideo_dep, lib_common, lib_fastoml, lib_tensorflow],
   include_directories : [inc_fastoml, inc_common, inc_tensorflow, public_incdir],
   install : true,
-  install_dir : plugins_install_dir,
+  install_dir : libs_install_dir,
 )
 
 subdir('plugins')

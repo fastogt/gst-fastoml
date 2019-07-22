@@ -5,7 +5,7 @@ yolov2_sources = [
   'gstyolov2.cc'
 ]
 
-yolov2 = shared_library('yolov2',
+yolov2 = shared_library('gstyolov2',
   yolov2_sources,
   cpp_args: plugin_cpp_args,
   dependencies : [gst_dep, gstvideo_dep, lib_common, lib_fastoml],

@@ -21,28 +21,23 @@ struct _GstBackendPrivate {
   gchar* model;
 };
 
-G_DEFINE_TYPE_WITH_CODE(
-    GstBackend,
-    gst_backend,
-    G_TYPE_OBJECT,
-    GST_DEBUG_CATEGORY_INIT(gst_backend_debug_category, "backend", 0, "debug category for backend parameters");
-    G_ADD_PRIVATE(GstBackend));
+G_DEFINE_TYPE_WITH_CODE(GstBackend, gst_backend, G_TYPE_OBJECT, G_ADD_PRIVATE(GstBackend));
 
 #define GST_BACKEND_PRIVATE(self) (GstBackendPrivate*)(gst_backend_get_instance_private(self))
 
 static GQuark gst_backend_error_quark(void);
 static void gst_backend_init(GstBackend* self);
 static void gst_backend_finalize(GObject* obj);
-static void gst_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec);
-static void gst_backend_get_property(GObject* object, guint property_id, GValue* value, GParamSpec* pspec);
+static void gst_base_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec);
+static void gst_base_backend_get_property(GObject* object, guint property_id, GValue* value, GParamSpec* pspec);
 
 #define GST_BACKEND_ERROR gst_backend_error_quark()
 
 static void gst_backend_class_init(GstBackendClass* klass) {
   GObjectClass* gobject_class = G_OBJECT_CLASS(klass);
 
-  gobject_class->set_property = gst_backend_set_property;
-  gobject_class->get_property = gst_backend_get_property;
+  gobject_class->set_property = gst_base_backend_set_property;
+  gobject_class->get_property = gst_base_backend_get_property;
 
   g_object_class_install_property(gobject_class, PROP_MODEL,
                                   g_param_spec_string("model", "model", "Graph model path", DEFAULT_PROP_MODEL,
@@ -54,6 +49,7 @@ static void gst_backend_class_init(GstBackendClass* klass) {
 void gst_backend_init(GstBackend* self) {
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
   priv->model = g_strdup(DEFAULT_PROP_MODEL);
+  priv->backend = NULL;
 }
 
 void gst_backend_finalize(GObject* object) {
@@ -61,10 +57,12 @@ void gst_backend_finalize(GObject* object) {
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
   g_free(priv->model);
   priv->model = NULL;
+  delete priv->backend;
+  priv->backend = nullptr;
   G_OBJECT_CLASS(gst_backend_parent_class)->finalize(object);
 }
 
-void gst_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec) {
+void gst_base_backend_set_property(GObject* object, guint property_id, const GValue* value, GParamSpec* pspec) {
   GstBackend* self = GST_BACKEND(object);
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
 
@@ -80,7 +78,7 @@ void gst_backend_set_property(GObject* object, guint property_id, const GValue* 
   }
 }
 
-void gst_backend_get_property(GObject* object, guint property_id, GValue* value, GParamSpec* pspec) {
+void gst_base_backend_get_property(GObject* object, guint property_id, GValue* value, GParamSpec* pspec) {
   GstBackend* self = GST_BACKEND(object);
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
 
@@ -101,41 +99,23 @@ gboolean gst_backend_start(GstBackend* self, GError** error) {
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(self);
   g_return_val_if_fail(priv, FALSE);
   fastoml::Backend* backend = priv->backend;
-
-  g_return_val_if_fail(priv, FALSE);
-  g_return_val_if_fail(error, FALSE);
-
-  if (backend) {
-    return TRUE;
-  }
-
+  g_return_val_if_fail(backend, FALSE);
   g_return_val_if_fail(priv->model, FALSE);
 
-  fastoml::Backend* lbackend = nullptr;
-  fastoml::SupportedBackends type;
-  common::ErrnoError err = fastoml::Backend::MakeBackEnd(type, &lbackend);
+  common::ErrnoError err = backend->LoadGraph(common::file_system::ascii_file_string_path(priv->model));
   if (err) {
-    g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to create backend");
-    return FALSE;
-  }
-
-  err = lbackend->LoadGraph(common::file_system::ascii_file_string_path(priv->model));
-  if (err) {
-    delete lbackend;
     g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to load model graph");
     GST_ERROR_OBJECT(self, "Failed to load model graph");
     return FALSE;
   }
 
-  err = lbackend->Start();
+  err = backend->Start();
   if (err) {
-    delete lbackend;
     g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to start the backend engine");
     GST_ERROR_OBJECT(self, "Failed to start the backend engine");
     return FALSE;
   }
 
-  priv->backend = lbackend;
   return TRUE;
 }
 
@@ -154,8 +134,6 @@ gboolean gst_backend_stop(GstBackend* self, GError** error) {
     return FALSE;
   }
 
-  delete backend;
-  priv->backend = nullptr;
   return TRUE;
 }
 
@@ -225,6 +203,21 @@ GQuark gst_backend_error_quark(void) {
 }
 
 // subclass
+
+gboolean gst_backend_set_code(GstBackend* backend, fastoml::SupportedBackends code) {
+  g_return_val_if_fail(backend, FALSE);
+  GstBackendPrivate* priv = GST_BACKEND_PRIVATE(backend);
+  g_return_val_if_fail(backend, FALSE);
+
+  fastoml::Backend* lbackend = nullptr;
+  common::ErrnoError err = fastoml::Backend::MakeBackEnd(code, &lbackend);
+  if (err) {
+    return FALSE;
+  }
+
+  priv->backend = lbackend;
+  return TRUE;
+}
 
 void gst_backend_set_property(GstBackend* backend, const gchar* property, const GValue* value) {
   GstBackendPrivate* priv = GST_BACKEND_PRIVATE(backend);
