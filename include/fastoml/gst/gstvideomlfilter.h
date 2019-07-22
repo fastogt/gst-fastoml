@@ -18,14 +18,16 @@ typedef struct _GstVideoMLFilterClass GstVideoMLFilterClass;
 
 struct _GstVideoMLFilter {
   GstVideoFilter videofilter;
-};
 
-struct _GstVideoMLFilterClass {
+  const GstMetaInfo* inference_meta_info;
+
   gboolean (*post_process)(GstVideoMLFilter* videobalance,
                            const gpointer prediction,
                            gsize predsize,
                            gboolean* valid_prediction);
+};
 
+struct _GstVideoMLFilterClass {
   GstVideoFilterClass parent_class;
 };
 

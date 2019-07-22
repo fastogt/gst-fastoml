@@ -15,8 +15,8 @@
 #define DEFAULT_OBJ_THRESH 0.08
 #define DEFAULT_PROB_THRESH 0.08
 
-GST_DEBUG_CATEGORY_STATIC(gst_tinyyolov2_debug_category);
-#define GST_CAT_DEFAULT gst_tinyyolov2_debug_category
+GST_DEBUG_CATEGORY_STATIC(gst_yolov2_debug_category);
+#define GST_CAT_DEFAULT gst_yolov2_debug_category
 
 enum { PROP_0 };
 
@@ -24,6 +24,7 @@ static void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue
 static void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec);
 
 static void gst_yolov2_init(GstYolov2* self);
+static void gst_yolov2_dispose(GObject* object);
 static void gst_yolov2_finalize(GObject* object);
 
 static gboolean gst_tinyyolov2_postprocess(GstVideoMLFilter* videobalance,
@@ -31,12 +32,14 @@ static gboolean gst_tinyyolov2_postprocess(GstVideoMLFilter* videobalance,
                                            gsize predsize,
                                            gboolean* valid_prediction);
 
+/* class initialization */
+
 #define gst_yolov2_parent_class parent_class
 G_DEFINE_TYPE_WITH_CODE(
     GstYolov2,
     gst_yolov2,
     GST_TYPE_VIDEO_ML_FILTER,
-    GST_DEBUG_CATEGORY_INIT(gst_tinyyolov2_debug_category, PLUGIN_NAME, 0, "debug category for yolov2 element"));
+    GST_DEBUG_CATEGORY_INIT(gst_yolov2_debug_category, PLUGIN_NAME, 0, "debug category for yolov2 element"));
 
 static void gst_yolov2_class_init(GstYolov2Class* klass) {
   GObjectClass* gobject_class = G_OBJECT_CLASS(klass);
@@ -44,12 +47,11 @@ static void gst_yolov2_class_init(GstYolov2Class* klass) {
   GstVideoMLFilterClass* vi_class = GST_VIDEO_ML_FILTER_CLASS(klass);
 
   gobject_class->finalize = GST_DEBUG_FUNCPTR(gst_yolov2_finalize);
+  gobject_class->dispose = GST_DEBUG_FUNCPTR(gst_yolov2_dispose);
   gobject_class->set_property = GST_DEBUG_FUNCPTR(gst_yolov2_set_property);
   gobject_class->get_property = GST_DEBUG_FUNCPTR(gst_yolov2_get_property);
   gst_element_class_set_static_metadata(gstelement_class, "Yolov2", "Yolov2 detection", "Detect objects",
                                         "Alexandr Topilski <support@fastotgt.com>");
-
-  vi_class->post_process = GST_DEBUG_FUNCPTR(gst_tinyyolov2_postprocess);
 }
 
 static gdouble gst_sigmoid(gdouble x) {
@@ -164,7 +166,8 @@ gboolean gst_tinyyolov2_postprocess(GstVideoMLFilter* vm,
                                     gsize predsize,
                                     gboolean* valid_prediction) {
   GstYolov2* self = GST_YOLOV2(vm);
-  GstMeta* meta = gst_buffer_add_meta(NULL, self->inference_meta_info, NULL);
+  GstVideoMLFilter* vi_class = GST_VIDEO_ML_FILTER(self);
+  GstMeta* meta = gst_buffer_add_meta(NULL, vi_class->inference_meta_info, NULL);
   GstDetectionMeta* detect_meta = (GstDetectionMeta*)meta;
   detect_meta->num_boxes = 0;
 
@@ -175,7 +178,14 @@ gboolean gst_tinyyolov2_postprocess(GstVideoMLFilter* vm,
 }
 
 void gst_yolov2_init(GstYolov2* self) {
-  self->inference_meta_info = gst_detection_meta_get_info();
+  GstVideoMLFilter* vi_class = GST_VIDEO_ML_FILTER(self);
+  vi_class->post_process = GST_DEBUG_FUNCPTR(gst_tinyyolov2_postprocess);
+  vi_class->inference_meta_info = gst_detection_meta_get_info();
+}
+
+void gst_yolov2_dispose(GObject* object) {
+  GstYolov2* balance = GST_YOLOV2(object);
+  G_OBJECT_CLASS(parent_class)->dispose(object);
 }
 
 void gst_yolov2_finalize(GObject* object) {

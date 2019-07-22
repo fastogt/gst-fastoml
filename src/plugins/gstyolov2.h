@@ -15,7 +15,6 @@ typedef struct _GstYolov2Class GstYolov2Class;
 
 struct _GstYolov2 {
   GstVideoMLFilter videofilter;
-  const GstMetaInfo* inference_meta_info;
 };
 
 struct _GstYolov2Class {

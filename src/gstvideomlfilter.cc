@@ -17,7 +17,6 @@ enum { PROP_0, PROP_BACKEND };
 typedef struct _GstVideoMLFilterPrivate GstVideoMLFilterPrivate;
 struct _GstVideoMLFilterPrivate {
   void (*process)(GstVideoMLFilter* balance,
-                  GstVideoMLFilterClass* klass,
                   GstVideoFrame* in_frame,
                   GstVideoFrame* out_frame);
   GstBackend* backend;
@@ -103,7 +102,6 @@ static void gst_video_ml_filter_class_init(GstVideoMLFilterClass* klass) {
 // implementation
 
 static void gst_video_balance_planar_yuv(GstVideoMLFilter* balance,
-                                         GstVideoMLFilterClass* klass,
                                          GstVideoFrame* in_frame,
                                          GstVideoFrame* out_frame) {
   GstVideoMLFilterPrivate* priv = GST_VIDEO_ML_FILTER_PRIVATE(balance);
@@ -113,8 +111,8 @@ static void gst_video_balance_planar_yuv(GstVideoMLFilter* balance,
   gboolean result = gst_backend_process_frame(priv->backend, in_frame, &prediction_data, &prediction_size, &error);
   if (result) {
     gboolean is_valid;
-    if (klass->post_process) {
-      klass->post_process(balance, prediction_data, prediction_size, &is_valid);
+    if (balance->post_process) {
+      balance->post_process(balance, prediction_data, prediction_size, &is_valid);
     }
   } else {
     g_error_free(error);
@@ -123,21 +121,18 @@ static void gst_video_balance_planar_yuv(GstVideoMLFilter* balance,
 }
 
 static void gst_video_balance_semiplanar_yuv(GstVideoMLFilter* videobalance,
-                                             GstVideoMLFilterClass* klass,
                                              GstVideoFrame* in_frame,
                                              GstVideoFrame* out_frame) {
   gst_video_frame_copy(out_frame, in_frame);
 }
 
 static void gst_video_balance_packed_yuv(GstVideoMLFilter* videobalance,
-                                         GstVideoMLFilterClass* klass,
                                          GstVideoFrame* in_frame,
                                          GstVideoFrame* out_frame) {
   gst_video_frame_copy(out_frame, in_frame);
 }
 
 static void gst_video_balance_packed_rgb(GstVideoMLFilter* videobalance,
-                                         GstVideoMLFilterClass* klass,
                                          GstVideoFrame* in_frame,
                                          GstVideoFrame* out_frame) {
   gst_video_frame_copy(out_frame, in_frame);
@@ -196,7 +191,6 @@ gboolean gst_video_set_info(GstVideoFilter* vfilter,
 
 GstFlowReturn gst_video_transform_frame(GstVideoFilter* vfilter, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
   GstVideoMLFilter* videobalance = GST_VIDEO_ML_FILTER(vfilter);
-  GstVideoMLFilterClass* klass = GST_VIDEO_ML_FILTER_CLASS(videobalance);
   GstVideoMLFilterPrivate* priv = GST_VIDEO_ML_FILTER_PRIVATE(videobalance);
   if (!priv->process) {
     GST_ERROR_OBJECT(videobalance, "Not negotiated yet");
@@ -204,7 +198,7 @@ GstFlowReturn gst_video_transform_frame(GstVideoFilter* vfilter, GstVideoFrame* 
   }
 
   // GST_OBJECT_LOCK(videobalance);
-  priv->process(videobalance, klass, in_frame, out_frame);
+  priv->process(videobalance, in_frame, out_frame);
   // GST_OBJECT_UNLOCK(videobalance);
   return GST_FLOW_OK;
 }
