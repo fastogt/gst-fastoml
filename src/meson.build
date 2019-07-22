@@ -13,6 +13,8 @@ inc_tensorflow = include_directories('/usr/local/include')
 backends_sources = [
   'gstbackend.cc',
   'gsttensorflow.cc',
+  'gstmlmeta.cc',
+  'gstvideomlfilter.cc'
 ]
 
 backends = shared_library('fastoml_backends',

@@ -1,8 +1,6 @@
 #pragma once
 
-#include <gst/gst.h>
-#include <gst/video/gstvideofilter.h>
-#include <gst/video/video.h>
+#include <fastoml/gst/gstvideomlfilter.h>
 
 G_BEGIN_DECLS
 
@@ -15,18 +13,13 @@ G_BEGIN_DECLS
 typedef struct _GstYolov2 GstYolov2;
 typedef struct _GstYolov2Class GstYolov2Class;
 
-/**
- * GstVideoBalance:
- *
- * Opaque data structure.
- */
 struct _GstYolov2 {
-  GstVideoFilter videofilter;
-  void (*process)(GstYolov2* balance, GstVideoFrame* in_frame, GstVideoFrame* out_frame);
+  GstVideoMLFilter videofilter;
+  const GstMetaInfo* inference_meta_info;
 };
 
 struct _GstYolov2Class {
-  GstVideoFilterClass parent_class;
+  GstVideoMLFilterClass parent_class;
 };
 
 GType gst_yolov2_get_type(void);

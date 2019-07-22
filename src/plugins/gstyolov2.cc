@@ -3,245 +3,190 @@
 #endif
 
 #include "gstyolov2.h"
-#include <fastoml/gst/gstbackend.h>
+
+#include <math.h>
+
+#include <fastoml/gst/gstmlmeta.h>
 
 #define PLUGIN_NAME "yolov2"
 #define PLUGIN_DESCRIPTION "FastoGT yolov2 plugin"
 
-#define DEFAULT_PROP_BACKEND fastoml::TENSORFLOW
+#define TOTAL_BOXES_5 845
+#define DEFAULT_OBJ_THRESH 0.08
+#define DEFAULT_PROB_THRESH 0.08
 
-GST_DEBUG_CATEGORY_STATIC(videobalance_debug);
-#define GST_CAT_DEFAULT videobalance_debug
+GST_DEBUG_CATEGORY_STATIC(gst_tinyyolov2_debug_category);
+#define GST_CAT_DEFAULT gst_tinyyolov2_debug_category
 
-enum { PROP_0, PROP_BACKEND };
-
-typedef struct _GstYolov2Private GstYolov2Private;
-struct _GstYolov2Private {
-  GstBackend* backend;
-};
-
-#define GST_YOLOV2_PRIVATE(self) (GstYolov2Private*)(gst_yolov2_get_instance_private(self))
-
-#define PROCESSING_CAPS                                \
-  "{ AYUV, ARGB, BGRA, ABGR, RGBA, Y444, xRGB, RGBx, " \
-  "xBGR, BGRx, RGB, BGR, Y42B, YUY2, UYVY, YVYU, "     \
-  "I420, YV12, IYUV, Y41B, NV12, NV21 }"
-
-static GstStaticPadTemplate gst_video_balance_src_template =
-    GST_STATIC_PAD_TEMPLATE("src",
-                            GST_PAD_SRC,
-                            GST_PAD_ALWAYS,
-                            GST_STATIC_CAPS(GST_VIDEO_CAPS_MAKE(PROCESSING_CAPS) ";"
-                                                                                 "video/x-raw(ANY)"));
-
-static GstStaticPadTemplate gst_video_balance_sink_template =
-    GST_STATIC_PAD_TEMPLATE("sink",
-                            GST_PAD_SINK,
-                            GST_PAD_ALWAYS,
-                            GST_STATIC_CAPS(GST_VIDEO_CAPS_MAKE(PROCESSING_CAPS) ";"
-                                                                                 "video/x-raw(ANY)"));
+enum { PROP_0 };
 
 static void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec);
 static void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec);
-static gboolean gst_video_set_info(GstVideoFilter* vfilter,
-                                   GstCaps* incaps,
-                                   GstVideoInfo* in_info,
-                                   GstCaps* outcaps,
-                                   GstVideoInfo* out_info);
-static GstFlowReturn gst_video_transform_frame(GstVideoFilter* filter,
-                                               GstVideoFrame* in_frame,
-                                               GstVideoFrame* out_frame);
+
 static void gst_yolov2_init(GstYolov2* self);
 static void gst_yolov2_finalize(GObject* object);
-static gboolean gst_yolov2_start(GstBaseTransform* trans);
-static gboolean gst_yolov2_stop(GstBaseTransform* trans);
+
+static gboolean gst_tinyyolov2_postprocess(GstVideoMLFilter* videobalance,
+                                           const gpointer prediction,
+                                           gsize predsize,
+                                           gboolean* valid_prediction);
 
 #define gst_yolov2_parent_class parent_class
 G_DEFINE_TYPE_WITH_CODE(
     GstYolov2,
     gst_yolov2,
-    GST_TYPE_VIDEO_FILTER,
-    GST_DEBUG_CATEGORY_INIT(videobalance_debug, PLUGIN_NAME, 0, "debug category for yolov2 element");
-    G_ADD_PRIVATE(GstYolov2));
+    GST_TYPE_VIDEO_ML_FILTER,
+    GST_DEBUG_CATEGORY_INIT(gst_tinyyolov2_debug_category, PLUGIN_NAME, 0, "debug category for yolov2 element"));
 
 static void gst_yolov2_class_init(GstYolov2Class* klass) {
-  GObjectClass* gobject_class = (GObjectClass*)klass;
-  GstElementClass* gstelement_class = (GstElementClass*)klass;
-  GstBaseTransformClass* trans_class = (GstBaseTransformClass*)klass;
-  GstVideoFilterClass* vfilter_class = (GstVideoFilterClass*)klass;
+  GObjectClass* gobject_class = G_OBJECT_CLASS(klass);
+  GstElementClass* gstelement_class = GST_ELEMENT_CLASS(klass);
+  GstVideoMLFilterClass* vi_class = GST_VIDEO_ML_FILTER_CLASS(klass);
 
-  gobject_class->finalize = gst_yolov2_finalize;
-  gobject_class->set_property = gst_yolov2_set_property;
-  gobject_class->get_property = gst_yolov2_get_property;
-
-  GParamSpec* backend_spec =
-      g_param_spec_object("backend", "backend",
-                          "Type of predefined backend to use (NULL = default tensorflow).\n"
-                          "\t\t\tAccording to the selected backend "
-                          "different properties will be available.",
-                          GST_TYPE_BACKEND, GParamFlags(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property(gobject_class, PROP_BACKEND, backend_spec);
-
-  gst_element_class_set_static_metadata(gstelement_class, "Video analitics", "Filter/Effect/Video", "Detect objects",
+  gobject_class->finalize = GST_DEBUG_FUNCPTR(gst_yolov2_finalize);
+  gobject_class->set_property = GST_DEBUG_FUNCPTR(gst_yolov2_set_property);
+  gobject_class->get_property = GST_DEBUG_FUNCPTR(gst_yolov2_get_property);
+  gst_element_class_set_static_metadata(gstelement_class, "Yolov2", "Yolov2 detection", "Detect objects",
                                         "Alexandr Topilski <support@fastotgt.com>");
 
-  gst_element_class_add_static_pad_template(gstelement_class, &gst_video_balance_sink_template);
-  gst_element_class_add_static_pad_template(gstelement_class, &gst_video_balance_src_template);
-
-  trans_class->start = GST_DEBUG_FUNCPTR(gst_yolov2_start);
-  trans_class->stop = GST_DEBUG_FUNCPTR(gst_yolov2_stop);
-
-  vfilter_class->set_info = GST_DEBUG_FUNCPTR(gst_video_set_info);
-  vfilter_class->transform_frame = GST_DEBUG_FUNCPTR(gst_video_transform_frame);
+  vi_class->post_process = GST_DEBUG_FUNCPTR(gst_tinyyolov2_postprocess);
 }
 
-// implementation
-
-static void gst_video_balance_planar_yuv(GstYolov2* videobalance, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
-  gst_video_frame_copy(out_frame, in_frame);
+static gdouble gst_sigmoid(gdouble x) {
+  return 1.0 / (1.0 + pow(M_E, -1.0 * x));
 }
 
-static void gst_video_balance_semiplanar_yuv(GstYolov2* videobalance,
-                                             GstVideoFrame* in_frame,
-                                             GstVideoFrame* out_frame) {
-  gst_video_frame_copy(out_frame, in_frame);
+static void gst_box_to_pixels(BBox* normalized_box, gint row, gint col, gint box) {
+  gint grid_size = 32;
+  const gfloat box_anchors[] = {1.08, 1.19, 3.42, 4.41, 6.63, 11.38, 9.42, 5.11, 16.62, 10.52};
+
+  g_return_if_fail(normalized_box != NULL);
+
+  /* adjust the box center according to its cell and grid dim */
+  normalized_box->x = (col + gst_sigmoid(normalized_box->x)) * grid_size;
+  normalized_box->y = (row + gst_sigmoid(normalized_box->y)) * grid_size;
+
+  /* adjust the lengths and widths */
+  normalized_box->width = pow(M_E, normalized_box->width) * box_anchors[2 * box] * grid_size;
+  normalized_box->height = pow(M_E, normalized_box->height) * box_anchors[2 * box + 1] * grid_size;
 }
 
-static void gst_video_balance_packed_yuv(GstYolov2* videobalance, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
-  gst_video_frame_copy(out_frame, in_frame);
-}
+static void gst_get_boxes_from_prediction(gfloat obj_thresh,
+                                          gfloat prob_thresh,
+                                          gpointer prediction,
+                                          BBox* boxes,
+                                          gint* elements,
+                                          gint grid_h,
+                                          gint grid_w,
+                                          gint boxes_size) {
+  gint i, j, c, b;
+  gint index;
+  gdouble obj_prob;
+  gdouble cur_class_prob, max_class_prob;
+  gint max_class_prob_index;
+  gint counter = 0;
+  gint box_dim = 5;
+  gint classes = 20;
 
-static void gst_video_balance_packed_rgb(GstYolov2* videobalance, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
-  gst_video_frame_copy(out_frame, in_frame);
-}
+  g_return_if_fail(boxes != NULL);
+  g_return_if_fail(elements != NULL);
 
-/* get notified of caps and plug in the correct process function */
-gboolean gst_video_set_info(GstVideoFilter* vfilter,
-                            GstCaps* incaps,
-                            GstVideoInfo* in_info,
-                            GstCaps* outcaps,
-                            GstVideoInfo* out_info) {
-  GstYolov2* videobalance = GST_YOLOV2(vfilter);
-
-  GST_DEBUG_OBJECT(videobalance, "in %" GST_PTR_FORMAT " out %" GST_PTR_FORMAT, incaps, outcaps);
-
-  videobalance->process = NULL;
-
-  switch (GST_VIDEO_INFO_FORMAT(in_info)) {
-    case GST_VIDEO_FORMAT_I420:
-    case GST_VIDEO_FORMAT_YV12:
-    case GST_VIDEO_FORMAT_Y41B:
-    case GST_VIDEO_FORMAT_Y42B:
-    case GST_VIDEO_FORMAT_Y444:
-      videobalance->process = gst_video_balance_planar_yuv;
-      break;
-    case GST_VIDEO_FORMAT_YUY2:
-    case GST_VIDEO_FORMAT_UYVY:
-    case GST_VIDEO_FORMAT_AYUV:
-    case GST_VIDEO_FORMAT_YVYU:
-      videobalance->process = gst_video_balance_packed_yuv;
-      break;
-    case GST_VIDEO_FORMAT_NV12:
-    case GST_VIDEO_FORMAT_NV21:
-      videobalance->process = gst_video_balance_semiplanar_yuv;
-      break;
-    case GST_VIDEO_FORMAT_ARGB:
-    case GST_VIDEO_FORMAT_ABGR:
-    case GST_VIDEO_FORMAT_RGBA:
-    case GST_VIDEO_FORMAT_BGRA:
-    case GST_VIDEO_FORMAT_xRGB:
-    case GST_VIDEO_FORMAT_xBGR:
-    case GST_VIDEO_FORMAT_RGBx:
-    case GST_VIDEO_FORMAT_BGRx:
-    case GST_VIDEO_FORMAT_RGB:
-    case GST_VIDEO_FORMAT_BGR:
-      videobalance->process = gst_video_balance_packed_rgb;
-      break;
-    default:
-      GST_ERROR_OBJECT(videobalance, "unknown format %" GST_PTR_FORMAT, incaps);
-      return FALSE;
+  /* Iterate rows */
+  for (i = 0; i < grid_h; i++) {
+    /* Iterate colums */
+    for (j = 0; j < grid_w; j++) {
+      /* Iterate boxes */
+      for (b = 0; b < boxes_size; b++) {
+        index = ((i * grid_w + j) * boxes_size + b) * (box_dim + classes);
+        obj_prob = ((gfloat*)prediction)[index + 4];
+        /* If the Objectness score is over the threshold add it to the boxes list */
+        if (obj_prob > obj_thresh) {
+          max_class_prob = 0;
+          max_class_prob_index = 0;
+          for (c = 0; c < classes; c++) {
+            cur_class_prob = ((gfloat*)prediction)[index + box_dim + c];
+            if (cur_class_prob > max_class_prob) {
+              max_class_prob = cur_class_prob;
+              max_class_prob_index = c;
+            }
+          }
+          if (max_class_prob > prob_thresh) {
+            BBox result;
+            result.label = max_class_prob_index;
+            result.prob = max_class_prob;
+            result.x = ((gfloat*)prediction)[index];
+            result.y = ((gfloat*)prediction)[index + 1];
+            result.width = ((gfloat*)prediction)[index + 2];
+            result.height = ((gfloat*)prediction)[index + 3];
+            gst_box_to_pixels(&result, i, j, b);
+            result.x = result.x - result.width * 0.5;
+            result.y = result.y - result.height * 0.5;
+            boxes[counter] = result;
+            counter = counter + 1;
+          }
+        }
+      }
+    }
+    *elements = counter;
   }
+}
 
+static gboolean gst_create_boxes(GstYolov2* vi,
+                                 const gpointer prediction,
+                                 GstDetectionMeta* detect_meta,
+                                 gboolean* valid_prediction,
+                                 BBox** resulting_boxes,
+                                 gint* elements,
+                                 gfloat obj_thresh,
+                                 gfloat prob_thresh) {
+  gint grid_h = 13;
+  gint grid_w = 13;
+  gint boxes_size = 5;
+  BBox boxes[TOTAL_BOXES_5];
+  *elements = 0;
+
+  g_return_val_if_fail(vi != NULL, FALSE);
+  g_return_val_if_fail(prediction != NULL, FALSE);
+  g_return_val_if_fail(detect_meta != NULL, FALSE);
+  g_return_val_if_fail(valid_prediction != NULL, FALSE);
+  g_return_val_if_fail(resulting_boxes != NULL, FALSE);
+  g_return_val_if_fail(elements != NULL, FALSE);
+
+  gst_get_boxes_from_prediction(obj_thresh, prob_thresh, prediction, boxes, elements, grid_h, grid_w, boxes_size);
+
+  *resulting_boxes = (BBox*)g_malloc(*elements * sizeof(BBox));
+  memcpy(*resulting_boxes, boxes, *elements * sizeof(BBox));
   return TRUE;
 }
 
-GstFlowReturn gst_video_transform_frame(GstVideoFilter* vfilter, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
-  GstYolov2* videobalance = GST_YOLOV2(vfilter);
-  if (!videobalance->process) {
-    GST_ERROR_OBJECT(videobalance, "Not negotiated yet");
-    return GST_FLOW_NOT_NEGOTIATED;
-  }
+gboolean gst_tinyyolov2_postprocess(GstVideoMLFilter* vm,
+                                    const gpointer prediction,
+                                    gsize predsize,
+                                    gboolean* valid_prediction) {
+  GstYolov2* self = GST_YOLOV2(vm);
+  GstMeta* meta = gst_buffer_add_meta(NULL, self->inference_meta_info, NULL);
+  GstDetectionMeta* detect_meta = (GstDetectionMeta*)meta;
+  detect_meta->num_boxes = 0;
 
-  // GST_OBJECT_LOCK(videobalance);
-  videobalance->process(videobalance, in_frame, out_frame);
-  // GST_OBJECT_UNLOCK(videobalance);
-  return GST_FLOW_OK;
+  gst_create_boxes(self, prediction, detect_meta, valid_prediction, &detect_meta->boxes, &detect_meta->num_boxes,
+                   DEFAULT_OBJ_THRESH, DEFAULT_PROB_THRESH);
+  *valid_prediction = (detect_meta->num_boxes > 0) ? TRUE : FALSE;
+  return TRUE;
 }
 
 void gst_yolov2_init(GstYolov2* self) {
-  GstYolov2Private* priv = GST_YOLOV2_PRIVATE(self);
-
-  self->process = NULL;
-  priv->backend = gst_backend_new(DEFAULT_PROP_BACKEND);
+  self->inference_meta_info = gst_detection_meta_get_info();
 }
 
 void gst_yolov2_finalize(GObject* object) {
   GstYolov2* balance = GST_YOLOV2(object);
-  GstYolov2Private* priv = GST_YOLOV2_PRIVATE(balance);
-
-  balance->process = NULL;
-
-  if (priv->backend) {
-    gst_backend_free(priv->backend);
-    priv->backend = NULL;
-  }
   G_OBJECT_CLASS(parent_class)->finalize(object);
-}
-
-gboolean gst_yolov2_start(GstBaseTransform* trans) {
-  GstYolov2* self = GST_YOLOV2(trans);
-  GstYolov2Private* priv = GST_YOLOV2_PRIVATE(self);
-  if (!priv->backend) {
-    return FALSE;
-  }
-
-  GError* err = NULL;
-  if (!gst_backend_start(priv->backend, &err)) {
-    g_error_free(err);
-    return FALSE;
-  }
-
-  return TRUE;
-}
-
-gboolean gst_yolov2_stop(GstBaseTransform* trans) {
-  GstYolov2* self = GST_YOLOV2(trans);
-  GstYolov2Private* priv = GST_YOLOV2_PRIVATE(self);
-  if (!priv->backend) {
-    return FALSE;
-  }
-
-  GError* err = NULL;
-  if (!gst_backend_stop(priv->backend, &err)) {
-    g_error_free(err);
-    return FALSE;
-  }
-  return TRUE;
 }
 
 void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec) {
   GstYolov2* self = GST_YOLOV2(object);
-  GstYolov2Private* priv = GST_YOLOV2_PRIVATE(self);
-
   GST_OBJECT_LOCK(self);
   switch (prop_id) {
-    case PROP_BACKEND: {
-      if (priv->backend) {
-        gst_backend_free(priv->backend);
-      }
-      priv->backend = (GstBackend*)g_value_get_object(value);
-      break;
-    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
       break;
@@ -251,14 +196,8 @@ void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value
 
 void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec) {
   GstYolov2* balance = GST_YOLOV2(object);
-  GstYolov2Private* priv = GST_YOLOV2_PRIVATE(balance);
-
   GST_OBJECT_LOCK(balance);
   switch (prop_id) {
-    case PROP_BACKEND: {
-      g_value_set_object(value, priv->backend);
-      break;
-    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
       break;
