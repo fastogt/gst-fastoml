@@ -182,7 +182,7 @@ void gst_yolov2_init(GstYolov2* self) {
   GstYolov2Private* priv = GST_YOLOV2_PRIVATE(self);
 
   self->process = NULL;
-  priv->backend = gst_new_backend(DEFAULT_PROP_BACKEND);
+  priv->backend = gst_backend_new(DEFAULT_PROP_BACKEND);
 }
 
 void gst_yolov2_finalize(GObject* object) {
@@ -192,7 +192,7 @@ void gst_yolov2_finalize(GObject* object) {
   balance->process = NULL;
 
   if (priv->backend) {
-    gst_free_backend(priv->backend);
+    gst_backend_free(priv->backend);
     priv->backend = NULL;
   }
   G_OBJECT_CLASS(parent_class)->finalize(object);
@@ -237,7 +237,7 @@ void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value
   switch (prop_id) {
     case PROP_BACKEND: {
       if (priv->backend) {
-        gst_free_backend(priv->backend);
+        gst_backend_free(priv->backend);
       }
       priv->backend = (GstBackend*)g_value_get_object(value);
       break;

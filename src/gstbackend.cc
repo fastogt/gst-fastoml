@@ -204,7 +204,7 @@ gboolean gst_backend_process_frame(GstBackend* self,
   return TRUE;
 }
 
-GstBackend* gst_new_backend(fastoml::SupportedBackends code) {
+GstBackend* gst_backend_new(fastoml::SupportedBackends code) {
   if (code == fastoml::TENSORFLOW) {
     return (GstBackend*)g_object_new(GST_TYPE_TENSORFLOW, NULL);
   }
@@ -212,7 +212,7 @@ GstBackend* gst_new_backend(fastoml::SupportedBackends code) {
   return NULL;
 }
 
-void gst_free_backend(GstBackend* backend) {
+void gst_backend_free(GstBackend* backend) {
   g_clear_object(&backend);
 }
 

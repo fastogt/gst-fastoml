@@ -9,7 +9,6 @@ configure_file(output : 'config.h', configuration : cdata, install: true, instal
 
 public_headers = [
   'fastoml/gst/gstbackend.h',
-  'fastoml/gst/gstbackend_subclass.h',
   'fastoml/gst/gsttensorflow.h',
 ]
 
