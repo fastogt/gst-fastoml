@@ -168,7 +168,7 @@ gboolean gst_backend_process_frame(GstBackend* self,
   fastoml::IFrame* frame = nullptr;
   common::draw::Size size(input_frame->info.width, input_frame->info.height);
   GST_LOG_OBJECT(self, "Processing Frame of size %d x %d", input_frame->info.width, input_frame->info.height);
-  common::ErrnoError err = backend->MakeFrame(size, fastoml::ImageFormat::RGB, input_frame->data, &frame);
+  common::ErrnoError err = backend->MakeFrame(size, fastoml::ImageFormat::RGB, input_frame->data[0], &frame);
   if (err) {
     g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to create frame");
     return FALSE;

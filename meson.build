@@ -1,4 +1,4 @@
-project('gst-fastoml', 'cpp', default_options : ['c_std=c99', 'cpp_std=c++11'], version : '1.0.0.0', license : 'LGPL')
+project('gst-fastoml', ['cpp'], default_options : ['c_std=c99', 'cpp_std=c++11'], version : '1.0.0.0', license : 'LGPL')
 
 libs_install_dir = get_option('libdir')
 plugins_install_dir = join_paths(libs_install_dir, 'gstreamer-1.0')

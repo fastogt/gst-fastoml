@@ -19,9 +19,12 @@ typedef struct _GstVideoMLFilterClass GstVideoMLFilterClass;
 struct _GstVideoMLFilter {
   GstVideoFilter videofilter;
 
+  GstVideoConverter* convert;
   const GstMetaInfo* inference_meta_info;
 
+  gboolean (*pre_process)(GstVideoMLFilter* vi, GstVideoFrame* frame);
   gboolean (*post_process)(GstVideoMLFilter* videobalance,
+                           GstMeta* meta,
                            const gpointer prediction,
                            gsize predsize,
                            gboolean* valid_prediction);

@@ -8,17 +8,30 @@
 
 #include <fastoml/gst/gstmlmeta.h>
 
+#include <fastoml/gst/gstinferencepreprocess.h>
+
 #define PLUGIN_NAME "yolov2"
 #define PLUGIN_DESCRIPTION "FastoGT yolov2 plugin"
 
+#define MEAN 0
+#define STD 1/255.0
+#define MODEL_CHANNELS 3
+
 #define TOTAL_BOXES_5 845
+
+/* Objectness threshold */
+#define MAX_OBJ_THRESH 1
+#define MIN_OBJ_THRESH 0
 #define DEFAULT_OBJ_THRESH 0.08
+/* Class probability threshold */
+#define MAX_PROB_THRESH 1
+#define MIN_PROB_THRESH 0
 #define DEFAULT_PROB_THRESH 0.08
 
 GST_DEBUG_CATEGORY_STATIC(gst_yolov2_debug_category);
 #define GST_CAT_DEFAULT gst_yolov2_debug_category
 
-enum { PROP_0 };
+enum { PROP_0, PROP_OBJ_THRESH, PROP_PROB_THRESH };
 
 static void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec);
 static void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec);
@@ -27,10 +40,12 @@ static void gst_yolov2_init(GstYolov2* self);
 static void gst_yolov2_dispose(GObject* object);
 static void gst_yolov2_finalize(GObject* object);
 
-static gboolean gst_tinyyolov2_postprocess(GstVideoMLFilter* videobalance,
-                                           const gpointer prediction,
-                                           gsize predsize,
-                                           gboolean* valid_prediction);
+static gboolean gst_yolov2_preprocess(GstVideoMLFilter* vi, GstVideoFrame* inframe);
+static gboolean gst_yolov2_postprocess(GstVideoMLFilter* videobalance,
+                                       GstMeta* meta,
+                                       const gpointer prediction,
+                                       gsize predsize,
+                                       gboolean* valid_prediction);
 
 /* class initialization */
 
@@ -52,6 +67,15 @@ static void gst_yolov2_class_init(GstYolov2Class* klass) {
   gobject_class->get_property = GST_DEBUG_FUNCPTR(gst_yolov2_get_property);
   gst_element_class_set_static_metadata(gstelement_class, "Yolov2", "Yolov2 detection", "Detect objects",
                                         "Alexandr Topilski <support@fastotgt.com>");
+
+  g_object_class_install_property(
+      gobject_class, PROP_OBJ_THRESH,
+      g_param_spec_double("object-threshold", "obj-thresh", "Objectness threshold", MIN_OBJ_THRESH, MAX_OBJ_THRESH,
+                          DEFAULT_OBJ_THRESH, G_PARAM_READWRITE));
+  g_object_class_install_property(
+      gobject_class, PROP_PROB_THRESH,
+      g_param_spec_double("probability-threshold", "prob-thresh", "Class probability threshold", MIN_PROB_THRESH,
+                          MAX_PROB_THRESH, DEFAULT_PROB_THRESH, G_PARAM_READWRITE));
 }
 
 static gdouble gst_sigmoid(gdouble x) {
@@ -161,25 +185,31 @@ static gboolean gst_create_boxes(GstYolov2* vi,
   return TRUE;
 }
 
-gboolean gst_tinyyolov2_postprocess(GstVideoMLFilter* vm,
-                                    const gpointer prediction,
-                                    gsize predsize,
-                                    gboolean* valid_prediction) {
-  GstYolov2* self = GST_YOLOV2(vm);
-  GstVideoMLFilter* vi_class = GST_VIDEO_ML_FILTER(self);
-  GstMeta* meta = gst_buffer_add_meta(NULL, vi_class->inference_meta_info, NULL);
-  GstDetectionMeta* detect_meta = (GstDetectionMeta*)meta;
-  detect_meta->num_boxes = 0;
+gboolean gst_yolov2_preprocess(GstVideoMLFilter* vi, GstVideoFrame* inframe) {
+  return gst_normalize(inframe, MEAN, STD, MODEL_CHANNELS);
+}
 
+gboolean gst_yolov2_postprocess(GstVideoMLFilter* vm,
+                                GstMeta* meta,
+                                const gpointer prediction,
+                                gsize predsize,
+                                gboolean* valid_prediction) {
+  GstYolov2* self = GST_YOLOV2(vm);
+  GstDetectionMeta* detect_meta = (GstDetectionMeta*)(meta);
   gst_create_boxes(self, prediction, detect_meta, valid_prediction, &detect_meta->boxes, &detect_meta->num_boxes,
-                   DEFAULT_OBJ_THRESH, DEFAULT_PROB_THRESH);
-  *valid_prediction = (detect_meta->num_boxes > 0) ? TRUE : FALSE;
+                   self->obj_thresh, self->prob_thresh);
+  gboolean have_boxes = (detect_meta->num_boxes > 0) ? TRUE : FALSE;
+  *valid_prediction = have_boxes;
   return TRUE;
 }
 
 void gst_yolov2_init(GstYolov2* self) {
   GstVideoMLFilter* vi_class = GST_VIDEO_ML_FILTER(self);
-  vi_class->post_process = GST_DEBUG_FUNCPTR(gst_tinyyolov2_postprocess);
+  self->obj_thresh = DEFAULT_OBJ_THRESH;
+  self->prob_thresh = DEFAULT_PROB_THRESH;
+
+  vi_class->pre_process = GST_DEBUG_FUNCPTR(gst_yolov2_preprocess);
+  vi_class->post_process = GST_DEBUG_FUNCPTR(gst_yolov2_postprocess);
   vi_class->inference_meta_info = gst_detection_meta_get_info();
 }
 
@@ -197,6 +227,14 @@ void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value
   GstYolov2* self = GST_YOLOV2(object);
   GST_OBJECT_LOCK(self);
   switch (prop_id) {
+    case PROP_OBJ_THRESH:
+      self->obj_thresh = g_value_get_double(value);
+      GST_DEBUG_OBJECT(self, "Changed objectness threshold to %lf", self->obj_thresh);
+      break;
+    case PROP_PROB_THRESH:
+      self->prob_thresh = g_value_get_double(value);
+      GST_DEBUG_OBJECT(self, "Changed probability threshold to %lf", self->prob_thresh);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
       break;
@@ -205,14 +243,20 @@ void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value
 }
 
 void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec) {
-  GstYolov2* balance = GST_YOLOV2(object);
-  GST_OBJECT_LOCK(balance);
+  GstYolov2* self = GST_YOLOV2(object);
+  GST_OBJECT_LOCK(self);
   switch (prop_id) {
+    case PROP_OBJ_THRESH:
+      g_value_set_double(value, self->obj_thresh);
+      break;
+    case PROP_PROB_THRESH:
+      g_value_set_double(value, self->prob_thresh);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
       break;
   }
-  GST_OBJECT_UNLOCK(balance);
+  GST_OBJECT_UNLOCK(self);
 }
 
 static gboolean plugin_init(GstPlugin* plugin) {

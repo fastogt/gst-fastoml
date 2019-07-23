@@ -16,10 +16,9 @@ enum { PROP_0, PROP_BACKEND };
 
 typedef struct _GstVideoMLFilterPrivate GstVideoMLFilterPrivate;
 struct _GstVideoMLFilterPrivate {
-  void (*process)(GstVideoMLFilter* balance,
-                  GstVideoFrame* in_frame,
-                  GstVideoFrame* out_frame);
+  void (*process)(GstVideoMLFilter* balance, GstVideoFrame* in_frame, GstVideoFrame* out_frame);
   GstBackend* backend;
+  GstVideoInfo* rgb_info;
 };
 
 #define GST_VIDEO_ML_FILTER_PRIVATE(self) (GstVideoMLFilterPrivate*)(gst_video_ml_filter_get_instance_private(self))
@@ -57,6 +56,23 @@ static void gst_video_ml_filter_init(GstVideoMLFilter* self);
 static void gst_video_ml_filter_finalize(GObject* object);
 static gboolean gst_video_ml_filter_start(GstBaseTransform* trans);
 static gboolean gst_video_ml_filter_stop(GstBaseTransform* trans);
+
+static GstVideoInfo* create_rgb_video_info(GstVideoInfo* info) {
+  GstCaps* caps = gst_video_info_to_caps(info);
+  gst_caps_set_simple(caps, "format", G_TYPE_STRING, "RGB", NULL);
+  GstVideoInfo* vinfo = gst_video_info_new();
+  if (!gst_video_info_from_caps(vinfo, caps)) {
+    return NULL;
+  }
+
+  return vinfo;
+}
+
+static GstVideoConverter* create_rgb_converter(GstVideoInfo* in_info, GstVideoInfo* out_info) {
+  return gst_video_converter_new(
+      in_info, out_info,
+      gst_structure_new("GstVideoConvertConfig", GST_VIDEO_CONVERTER_OPT_THREADS, G_TYPE_UINT, 1, NULL));
+}
 
 #define gst_video_ml_filter_parent_class parent_class
 G_DEFINE_TYPE_WITH_CODE(GstVideoMLFilter,
@@ -101,41 +117,80 @@ static void gst_video_ml_filter_class_init(GstVideoMLFilterClass* klass) {
 
 // implementation
 
-static void gst_video_balance_planar_yuv(GstVideoMLFilter* balance,
-                                         GstVideoFrame* in_frame,
-                                         GstVideoFrame* out_frame) {
-  GstVideoMLFilterPrivate* priv = GST_VIDEO_ML_FILTER_PRIVATE(balance);
+static void gst_video_balance_packed_rgb_impl(GstVideoMLFilter* filter,
+                                              GstVideoFrame* in_frame,
+                                              GstVideoFrame* out_frame) {
+  GstVideoMLFilterPrivate* priv = GST_VIDEO_ML_FILTER_PRIVATE(filter);
+  if (filter->pre_process) {
+    if (!filter->pre_process(filter, in_frame)) {
+      return;
+    }
+  }
+
   gpointer prediction_data = NULL;
   gsize prediction_size = 0;
   GError* error = NULL;
   gboolean result = gst_backend_process_frame(priv->backend, in_frame, &prediction_data, &prediction_size, &error);
   if (result) {
     gboolean is_valid;
-    if (balance->post_process) {
-      balance->post_process(balance, prediction_data, prediction_size, &is_valid);
+    if (filter->post_process) {
+      GstMeta* meta = gst_buffer_add_meta(out_frame->buffer, filter->inference_meta_info, NULL);
+      filter->post_process(filter, meta, prediction_data, prediction_size, &is_valid);
+      gst_buffer_remove_meta(out_frame->buffer, meta);
     }
   } else {
     g_error_free(error);
   }
+}
+
+static void gst_video_balance_packed_rgb(GstVideoMLFilter* filter, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
+  gst_video_balance_packed_rgb_impl(filter, in_frame, out_frame);
   gst_video_frame_copy(out_frame, in_frame);
 }
 
-static void gst_video_balance_semiplanar_yuv(GstVideoMLFilter* videobalance,
+static void gst_video_balance_planar_yuv(GstVideoMLFilter* filter, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
+  if (!filter->convert) {
+    gst_video_frame_copy(out_frame, in_frame);
+    return;
+  }
+
+  GstVideoMLFilterPrivate* priv = GST_VIDEO_ML_FILTER_PRIVATE(filter);
+  GstVideoFrame* converted_frame = g_slice_new0(GstVideoFrame);
+  GstVideoInfo* info = priv->rgb_info;
+  GstAllocationParams params;
+  gst_allocation_params_init(&params);
+  size_t buffer_size = info->size * sizeof(gfloat);
+  GstBuffer* dest = gst_buffer_new_allocate(NULL, buffer_size, &params);
+  if (!gst_video_frame_map(converted_frame, info, dest, GST_MAP_READWRITE)) {
+    g_slice_free(GstVideoFrame, converted_frame);
+    return;
+  }
+
+  gst_video_converter_frame(filter->convert, in_frame, converted_frame);
+  gst_video_balance_packed_rgb_impl(filter, converted_frame, out_frame);
+  gst_video_frame_unmap(converted_frame);
+
+  gst_video_frame_copy(in_frame, converted_frame);
+}
+
+static void gst_video_balance_semiplanar_yuv(GstVideoMLFilter* filter,
                                              GstVideoFrame* in_frame,
                                              GstVideoFrame* out_frame) {
-  gst_video_frame_copy(out_frame, in_frame);
+  if (!filter->convert) {
+    gst_video_frame_copy(out_frame, in_frame);
+    return;
+  }
+
+  gst_video_balance_packed_rgb(filter, in_frame, out_frame);
 }
 
-static void gst_video_balance_packed_yuv(GstVideoMLFilter* videobalance,
-                                         GstVideoFrame* in_frame,
-                                         GstVideoFrame* out_frame) {
-  gst_video_frame_copy(out_frame, in_frame);
-}
+static void gst_video_balance_packed_yuv(GstVideoMLFilter* filter, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
+  if (!filter->convert) {
+    gst_video_frame_copy(out_frame, in_frame);
+    return;
+  }
 
-static void gst_video_balance_packed_rgb(GstVideoMLFilter* videobalance,
-                                         GstVideoFrame* in_frame,
-                                         GstVideoFrame* out_frame) {
-  gst_video_frame_copy(out_frame, in_frame);
+  gst_video_balance_packed_rgb(filter, in_frame, out_frame);
 }
 
 /* get notified of caps and plug in the correct process function */
@@ -149,6 +204,32 @@ gboolean gst_video_set_info(GstVideoFilter* vfilter,
 
   GST_DEBUG_OBJECT(videobalance, "in %" GST_PTR_FORMAT " out %" GST_PTR_FORMAT, incaps, outcaps);
 
+  if (priv->rgb_info) {
+    gst_video_info_free(priv->rgb_info);
+    priv->rgb_info = NULL;
+  }
+
+  if (videobalance->convert) {
+    gst_video_converter_free(videobalance->convert);
+    videobalance->convert = NULL;
+  }
+
+  /* these must match */
+  if (in_info->width != out_info->width || in_info->height != out_info->height || in_info->fps_n != out_info->fps_n ||
+      in_info->fps_d != out_info->fps_d) {
+    GST_ERROR_OBJECT(videobalance, "input and output formats do not match");
+    return FALSE;
+  }
+  if (in_info->par_n != out_info->par_n || in_info->par_d != out_info->par_d) {
+    GST_ERROR_OBJECT(videobalance, "input and output formats do not match");
+    return FALSE;
+  }
+
+  if (in_info->interlace_mode != out_info->interlace_mode) {
+    GST_ERROR_OBJECT(videobalance, "input and output formats do not match");
+    return FALSE;
+  }
+
   priv->process = NULL;
 
   switch (GST_VIDEO_INFO_FORMAT(in_info)) {
@@ -157,16 +238,22 @@ gboolean gst_video_set_info(GstVideoFilter* vfilter,
     case GST_VIDEO_FORMAT_Y41B:
     case GST_VIDEO_FORMAT_Y42B:
     case GST_VIDEO_FORMAT_Y444:
+      priv->rgb_info = create_rgb_video_info(in_info);
+      videobalance->convert = create_rgb_converter(in_info, priv->rgb_info);
       priv->process = gst_video_balance_planar_yuv;
       break;
     case GST_VIDEO_FORMAT_YUY2:
     case GST_VIDEO_FORMAT_UYVY:
     case GST_VIDEO_FORMAT_AYUV:
     case GST_VIDEO_FORMAT_YVYU:
+      priv->rgb_info = create_rgb_video_info(in_info);
+      videobalance->convert = create_rgb_converter(in_info, priv->rgb_info);
       priv->process = gst_video_balance_packed_yuv;
       break;
     case GST_VIDEO_FORMAT_NV12:
     case GST_VIDEO_FORMAT_NV21:
+      priv->rgb_info = create_rgb_video_info(in_info);
+      videobalance->convert = create_rgb_converter(in_info, priv->rgb_info);
       priv->process = gst_video_balance_semiplanar_yuv;
       break;
     case GST_VIDEO_FORMAT_ARGB:
@@ -186,6 +273,7 @@ gboolean gst_video_set_info(GstVideoFilter* vfilter,
       return FALSE;
   }
 
+  GST_DEBUG("reconfigured %d %d", GST_VIDEO_INFO_FORMAT(in_info), GST_VIDEO_INFO_FORMAT(out_info));
   return TRUE;
 }
 
@@ -206,6 +294,7 @@ GstFlowReturn gst_video_transform_frame(GstVideoFilter* vfilter, GstVideoFrame* 
 void gst_video_ml_filter_init(GstVideoMLFilter* self) {
   GstVideoMLFilterPrivate* priv = GST_VIDEO_ML_FILTER_PRIVATE(self);
   priv->process = NULL;
+  self->convert = NULL;
   priv->backend = gst_backend_new(DEFAULT_PROP_BACKEND);
 }
 
@@ -214,6 +303,16 @@ void gst_video_ml_filter_finalize(GObject* object) {
   GstVideoMLFilterPrivate* priv = GST_VIDEO_ML_FILTER_PRIVATE(balance);
 
   priv->process = NULL;
+
+  if (priv->rgb_info) {
+    gst_video_info_free(priv->rgb_info);
+    priv->rgb_info = NULL;
+  }
+
+  if (balance->convert) {
+    gst_video_converter_free(balance->convert);
+    balance->convert = NULL;
+  }
 
   if (priv->backend) {
     gst_backend_free(priv->backend);

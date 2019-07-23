@@ -15,6 +15,9 @@ typedef struct _GstYolov2Class GstYolov2Class;
 
 struct _GstYolov2 {
   GstVideoMLFilter videofilter;
+
+  gdouble obj_thresh;
+  gdouble prob_thresh;
 };
 
 struct _GstYolov2Class {
