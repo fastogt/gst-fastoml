@@ -13,6 +13,7 @@ GST_DEBUG_CATEGORY_STATIC(gst_video_ml_filter_debug_category);
 #define GST_CAT_DEFAULT gst_video_ml_filter_debug_category
 
 enum { PROP_0, PROP_BACKEND };
+enum { NEW_PREDICTION_SIGNAL, LAST_SIGNAL };
 
 typedef struct _GstVideoMLFilterPrivate GstVideoMLFilterPrivate;
 struct _GstVideoMLFilterPrivate {
@@ -84,6 +85,8 @@ G_DEFINE_TYPE_WITH_CODE(GstVideoMLFilter,
                                                 "debug category for video ml filter element");
                         G_ADD_PRIVATE(GstVideoMLFilter));
 
+static guint gst_video_inference_signals[LAST_SIGNAL] = {0};
+
 static void gst_video_ml_filter_class_init(GstVideoMLFilterClass* klass) {
   GObjectClass* gobject_class = G_OBJECT_CLASS(klass);
   GstElementClass* gstelement_class = GST_ELEMENT_CLASS(klass);
@@ -101,6 +104,10 @@ static void gst_video_ml_filter_class_init(GstVideoMLFilterClass* klass) {
                           "different properties will be available.",
                           GST_TYPE_BACKEND, GParamFlags(G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property(gobject_class, PROP_BACKEND, backend_spec);
+
+  gst_video_inference_signals[NEW_PREDICTION_SIGNAL] =
+      g_signal_new("new-prediction", GST_TYPE_VIDEO_ML_FILTER, G_SIGNAL_RUN_FIRST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1,
+                   G_TYPE_POINTER);
 
   gst_element_class_set_static_metadata(gstelement_class, "Video analitics", "Filter/Effect/Video", "Detect objects",
                                         "Alexandr Topilski <support@fastotgt.com>");
@@ -131,15 +138,18 @@ static void gst_video_balance_packed_rgb_impl(GstVideoMLFilter* filter,
   gsize prediction_size = 0;
   GError* error = NULL;
   gboolean result = gst_backend_process_frame(priv->backend, in_frame, &prediction_data, &prediction_size, &error);
-  if (result) {
-    gboolean is_valid;
-    if (filter->post_process) {
-      GstMeta* meta = gst_buffer_add_meta(out_frame->buffer, filter->inference_meta_info, NULL);
-      filter->post_process(filter, meta, prediction_data, prediction_size, &is_valid);
-      gst_buffer_remove_meta(out_frame->buffer, meta);
-    }
-  } else {
+  if (!result) {
     g_error_free(error);
+    return;
+  }
+
+  if (filter->post_process) {
+    GstMeta* meta = gst_buffer_add_meta(out_frame->buffer, filter->inference_meta_info, NULL);
+    gboolean is_valid;
+    if (filter->post_process(filter, meta, prediction_data, prediction_size, &is_valid)) {
+      g_signal_emit(filter, gst_video_inference_signals[NEW_PREDICTION_SIGNAL], 0, meta);
+    }
+    gst_buffer_remove_meta(out_frame->buffer, meta);
   }
 }
 

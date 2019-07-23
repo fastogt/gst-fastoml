@@ -18,6 +18,7 @@ struct _GstYolov2 {
 
   gdouble obj_thresh;
   gdouble prob_thresh;
+  gdouble iou_thresh;
 };
 
 struct _GstYolov2Class {

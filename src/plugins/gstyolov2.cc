@@ -14,7 +14,7 @@
 #define PLUGIN_DESCRIPTION "FastoGT yolov2 plugin"
 
 #define MEAN 0
-#define STD 1/255.0
+#define STD 1 / 255.0
 #define MODEL_CHANNELS 3
 
 #define TOTAL_BOXES_5 845
@@ -27,11 +27,20 @@
 #define MAX_PROB_THRESH 1
 #define MIN_PROB_THRESH 0
 #define DEFAULT_PROB_THRESH 0.08
+/* Intersection over union threshold */
+#define MAX_IOU_THRESH 1
+#define MIN_IOU_THRESH 0
+#define DEFAULT_IOU_THRESH 0.30
 
 GST_DEBUG_CATEGORY_STATIC(gst_yolov2_debug_category);
 #define GST_CAT_DEFAULT gst_yolov2_debug_category
 
-enum { PROP_0, PROP_OBJ_THRESH, PROP_PROB_THRESH };
+enum {
+  PROP_0,
+  PROP_OBJ_THRESH,
+  PROP_PROB_THRESH,
+  PROP_IOU_THRESH,
+};
 
 static void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value, GParamSpec* pspec);
 static void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GParamSpec* pspec);
@@ -76,6 +85,73 @@ static void gst_yolov2_class_init(GstYolov2Class* klass) {
       gobject_class, PROP_PROB_THRESH,
       g_param_spec_double("probability-threshold", "prob-thresh", "Class probability threshold", MIN_PROB_THRESH,
                           MAX_PROB_THRESH, DEFAULT_PROB_THRESH, G_PARAM_READWRITE));
+  g_object_class_install_property(
+      gobject_class, PROP_IOU_THRESH,
+      g_param_spec_double("iou-threshold", "iou-thresh", "Intersection over union threshold to merge similar boxes",
+                          MIN_IOU_THRESH, MAX_IOU_THRESH, DEFAULT_IOU_THRESH, G_PARAM_READWRITE));
+}
+
+static gdouble gst_intersection_over_union(BBox box_1, BBox box_2) {
+  /*
+   * Evaluate the intersection-over-union for two boxes
+   * The intersection-over-union metric determines how close
+   * two boxes are to being the same box.
+   */
+  gdouble intersection_area;
+  gdouble intersection_dim_1 = MIN(box_1.x + box_1.width, box_2.x + box_2.width) - MAX(box_1.x, box_2.x);
+  gdouble intersection_dim_2 = MIN(box_1.y + box_1.height, box_2.y + box_2.height) - MAX(box_1.y, box_2.y);
+
+  if ((intersection_dim_1 < 0) || (intersection_dim_2 < 0)) {
+    intersection_area = 0;
+  } else {
+    intersection_area = intersection_dim_1 * intersection_dim_2;
+  }
+  gdouble union_area = box_1.width * box_1.height + box_2.width * box_2.height - intersection_area;
+  return intersection_area / union_area;
+}
+
+static void gst_delete_box(BBox* boxes, gint* num_boxes, gint index) {
+  gint i, last_index;
+
+  g_return_if_fail(boxes != NULL);
+  g_return_if_fail(num_boxes != NULL);
+
+  if (*num_boxes > 0 && index < *num_boxes && index > -1) {
+    last_index = *num_boxes - 1;
+    for (i = index; i < last_index; i++) {
+      boxes[i] = boxes[i + 1];
+    }
+    *num_boxes -= 1;
+  }
+}
+
+static void gst_remove_duplicated_boxes(gfloat iou_thresh, BBox* boxes, gint* num_boxes) {
+  /* Remove duplicated boxes. A box is considered a duplicate if its
+   * intersection over union metric is above a threshold
+   */
+  gdouble iou;
+  gint it1, it2;
+
+  g_return_if_fail(boxes != NULL);
+  g_return_if_fail(num_boxes != NULL);
+
+  for (it1 = 0; it1 < *num_boxes - 1; it1++) {
+    for (it2 = it1 + 1; it2 < *num_boxes; it2++) {
+      if (boxes[it1].label == boxes[it2].label) {
+        iou = gst_intersection_over_union(boxes[it1], boxes[it2]);
+        if (iou > iou_thresh) {
+          if (boxes[it1].prob > boxes[it2].prob) {
+            gst_delete_box(boxes, num_boxes, it2);
+            it2--;
+          } else {
+            gst_delete_box(boxes, num_boxes, it1);
+            it1--;
+            break;
+          }
+        }
+      }
+    }
+  }
 }
 
 static gdouble gst_sigmoid(gdouble x) {
@@ -164,7 +240,8 @@ static gboolean gst_create_boxes(GstYolov2* vi,
                                  BBox** resulting_boxes,
                                  gint* elements,
                                  gfloat obj_thresh,
-                                 gfloat prob_thresh) {
+                                 gfloat prob_thresh,
+                                 gfloat iou_thresh) {
   gint grid_h = 13;
   gint grid_w = 13;
   gint boxes_size = 5;
@@ -179,6 +256,7 @@ static gboolean gst_create_boxes(GstYolov2* vi,
   g_return_val_if_fail(elements != NULL, FALSE);
 
   gst_get_boxes_from_prediction(obj_thresh, prob_thresh, prediction, boxes, elements, grid_h, grid_w, boxes_size);
+  gst_remove_duplicated_boxes(iou_thresh, boxes, elements);
 
   *resulting_boxes = (BBox*)g_malloc(*elements * sizeof(BBox));
   memcpy(*resulting_boxes, boxes, *elements * sizeof(BBox));
@@ -197,7 +275,7 @@ gboolean gst_yolov2_postprocess(GstVideoMLFilter* vm,
   GstYolov2* self = GST_YOLOV2(vm);
   GstDetectionMeta* detect_meta = (GstDetectionMeta*)(meta);
   gst_create_boxes(self, prediction, detect_meta, valid_prediction, &detect_meta->boxes, &detect_meta->num_boxes,
-                   self->obj_thresh, self->prob_thresh);
+                   self->obj_thresh, self->prob_thresh, self->iou_thresh);
   gboolean have_boxes = (detect_meta->num_boxes > 0) ? TRUE : FALSE;
   *valid_prediction = have_boxes;
   return TRUE;
@@ -235,6 +313,9 @@ void gst_yolov2_set_property(GObject* object, guint prop_id, const GValue* value
       self->prob_thresh = g_value_get_double(value);
       GST_DEBUG_OBJECT(self, "Changed probability threshold to %lf", self->prob_thresh);
       break;
+    case PROP_IOU_THRESH:
+      self->iou_thresh = g_value_get_double(value);
+      GST_DEBUG_OBJECT(self, "Changed intersection over union threshold to %lf", self->iou_thresh);
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
       break;
@@ -251,6 +332,9 @@ void gst_yolov2_get_property(GObject* object, guint prop_id, GValue* value, GPar
       break;
     case PROP_PROB_THRESH:
       g_value_set_double(value, self->prob_thresh);
+      break;
+    case PROP_IOU_THRESH:
+      g_value_set_double(value, self->iou_thresh);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
