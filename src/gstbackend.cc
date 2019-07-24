@@ -173,7 +173,7 @@ static size_t GetTopPrediction(fastoml::IPrediction* prediction) {
 
 gboolean gst_backend_process_frame(GstBackend* self,
                                    GstVideoFrame* input_frame,
-                                   gpointer matrix_data,
+                                   matrix_data_t* matrix_data,
                                    gpointer* prediction_data,
                                    gsize* prediction_size,
                                    GError** error) {

@@ -3,6 +3,7 @@
 #include <gst/gst.h>
 #include <gst/video/gstvideofilter.h>
 #include <gst/video/video.h>
+#include <fastoml/gst/gsttypes.h>
 
 G_BEGIN_DECLS
 
@@ -22,7 +23,7 @@ struct _GstVideoMLFilter {
   GstVideoConverter* convert;
   const GstMetaInfo* inference_meta_info;
 
-  gboolean (*pre_process)(GstVideoMLFilter* vi, GstVideoFrame* frame, gpointer matrix_data);
+  gboolean (*pre_process)(GstVideoMLFilter* vi, GstVideoFrame* frame, matrix_data_t* matrix_data);
   gboolean (*post_process)(GstVideoMLFilter* videobalance,
                            GstMeta* meta,
                            const gpointer prediction,

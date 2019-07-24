@@ -48,7 +48,7 @@ static void gst_tinyyolov2_init(GstTinyYolov2* self);
 static void gst_tinyyolov2_dispose(GObject* object);
 static void gst_tinyyolov2_finalize(GObject* object);
 
-static gboolean gst_tinyyolov2_preprocess(GstVideoMLFilter* vi, GstVideoFrame* inframe, gpointer matrix_data);
+static gboolean gst_tinyyolov2_preprocess(GstVideoMLFilter* vi, GstVideoFrame* inframe, matrix_data_t* matrix_data);
 static gboolean gst_tinyyolov2_postprocess(GstVideoMLFilter* videobalance,
                                        GstMeta* meta,
                                        const gpointer prediction,
@@ -90,7 +90,7 @@ static void gst_tinyyolov2_class_init(GstTinyYolov2Class* klass) {
                           MIN_IOU_THRESH, MAX_IOU_THRESH, DEFAULT_IOU_THRESH, G_PARAM_READWRITE));
 }
 
-gboolean gst_tinyyolov2_preprocess(GstVideoMLFilter* vi, GstVideoFrame* inframe, gpointer matrix_data) {
+gboolean gst_tinyyolov2_preprocess(GstVideoMLFilter* vi, GstVideoFrame* inframe, matrix_data_t* matrix_data) {
   return gst_normalize(inframe, matrix_data, MEAN, STD, MODEL_CHANNELS);
 }
 

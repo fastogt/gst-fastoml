@@ -47,7 +47,7 @@ static void gst_tinyyolov3_init(GstTinyYolov3* self);
 static void gst_tinyyolov3_dispose(GObject* object);
 static void gst_tinyyolov3_finalize(GObject* object);
 
-static gboolean gst_tinyyolov3_preprocess(GstVideoMLFilter* vi, GstVideoFrame* inframe, GstVideoFrame* outframe);
+static gboolean gst_tinyyolov3_preprocess(GstVideoMLFilter* vi, GstVideoFrame* inframe, matrix_data_t* matrix_data);
 static gboolean gst_tinyyolov3_postprocess(GstVideoMLFilter* vi,
                                            GstMeta* meta,
                                            const gpointer prediction,
@@ -148,8 +148,8 @@ static void gst_tinyyolov3_get_property(GObject* object, guint property_id, GVal
   }
 }
 
-static gboolean gst_tinyyolov3_preprocess(GstVideoMLFilter* vi, GstVideoFrame* inframe, GstVideoFrame* outframe) {
-  return gst_pixel_to_float(inframe, outframe, MODEL_CHANNELS);
+static gboolean gst_tinyyolov3_preprocess(GstVideoMLFilter* vi, GstVideoFrame* inframe, matrix_data_t* matrix_data) {
+  return gst_pixel_to_float(inframe, matrix_data, MODEL_CHANNELS);
 }
 
 static gboolean gst_tinyyolov3_postprocess(GstVideoMLFilter* vi,

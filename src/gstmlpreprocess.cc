@@ -9,7 +9,7 @@ static gboolean gst_check_format_RGB(GstVideoFrame* inframe,
                                      gint* channels);
 
 static void gst_apply_means_std(GstVideoFrame* inframe,
-                                gpointer matrix_data,
+                                matrix_data_t* matrix_data,
                                 gint first_index,
                                 gint last_index,
                                 gint offset,
@@ -34,13 +34,13 @@ static void gst_apply_means_std(GstVideoFrame* inframe,
     for (j = 0; j < width; ++j) {
       gfloat out_value0 =
           (((guchar*)inframe->data[0])[(i * pixel_stride + j) * channels + 0 + offset] - mean_red) * std_r;
-      ((gfloat*)matrix_data)[(i * width + j) * model_channels + first_index] = out_value0;
+      (matrix_data)[(i * width + j) * model_channels + first_index] = out_value0;
       gfloat out_value1 =
           (((guchar*)inframe->data[0])[(i * pixel_stride + j) * channels + 1 + offset] - mean_green) * std_g;
-      ((gfloat*)matrix_data)[(i * width + j) * model_channels + 1] = out_value1;
+      (matrix_data)[(i * width + j) * model_channels + 1] = out_value1;
       gfloat out_value2 =
           (((guchar*)inframe->data[0])[(i * pixel_stride + j) * channels + 2 + offset] - mean_blue) * std_b;
-      ((gfloat*)matrix_data)[(i * width + j) * model_channels + last_index] = out_value2;
+      (matrix_data)[(i * width + j) * model_channels + last_index] = out_value2;
     }
   }
 }
@@ -91,7 +91,11 @@ static gboolean gst_check_format_RGB(GstVideoFrame* inframe,
   return TRUE;
 }
 
-gboolean gst_normalize(GstVideoFrame* inframe, gpointer matrix_data, gdouble mean, gdouble std, gint model_channels) {
+gboolean gst_normalize(GstVideoFrame* inframe,
+                       matrix_data_t* matrix_data,
+                       gdouble mean,
+                       gdouble std,
+                       gint model_channels) {
   gint first_index = 0, last_index = 0, offset = 0, channels = 0;
   g_return_val_if_fail(inframe, FALSE);
   if (gst_check_format_RGB(inframe, &first_index, &last_index, &offset, &channels) == FALSE) {
@@ -104,7 +108,7 @@ gboolean gst_normalize(GstVideoFrame* inframe, gpointer matrix_data, gdouble mea
   return TRUE;
 }
 
-gboolean gst_normalize_face(GstVideoFrame* inframe, gpointer matrix_data, gint model_channels) {
+gboolean gst_normalize_face(GstVideoFrame* inframe, matrix_data_t* matrix_data, gint model_channels) {
   gint i, j, pixel_stride, width, height, channels;
   gdouble mean, std, variance, sum, normalized, R, G, B;
   gint first_index = 0, last_index = 0, offset = 0;
@@ -150,7 +154,7 @@ gboolean gst_normalize_face(GstVideoFrame* inframe, gpointer matrix_data, gint m
 }
 
 gboolean gst_subtract_mean(GstVideoFrame* inframe,
-                           gpointer matrix_data,
+                           matrix_data_t* matrix_data,
                            gdouble mean_red,
                            gdouble mean_green,
                            gdouble mean_blue,
@@ -168,7 +172,7 @@ gboolean gst_subtract_mean(GstVideoFrame* inframe,
   return TRUE;
 }
 
-gboolean gst_pixel_to_float(GstVideoFrame* inframe, gpointer matrix_data, gint model_channels) {
+gboolean gst_pixel_to_float(GstVideoFrame* inframe, matrix_data_t* matrix_data, gint model_channels) {
   gint first_index = 0, last_index = 0, offset = 0, channels = 0;
   const gdouble std = 1, mean = 0;
   g_return_val_if_fail(inframe != NULL, FALSE);

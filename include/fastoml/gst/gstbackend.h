@@ -2,6 +2,7 @@
 
 #include <gst/video/video.h>
 
+#include <fastoml/gst/gsttypes.h>
 #include <fastoml/types.h>
 
 G_BEGIN_DECLS
@@ -17,6 +18,6 @@ void gst_backend_free(GstBackend*);
 
 gboolean gst_backend_start(GstBackend*, GError**);
 gboolean gst_backend_stop(GstBackend*, GError**);
-gboolean gst_backend_process_frame(GstBackend*, GstVideoFrame*, gpointer, gpointer*, gsize*, GError**);
+gboolean gst_backend_process_frame(GstBackend*, GstVideoFrame*, matrix_data_t*, gpointer*, gsize*, GError**);
 
 G_END_DECLS

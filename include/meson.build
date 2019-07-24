@@ -8,6 +8,7 @@ cdata.set_quoted('GST_PACKAGE_ORIGIN', 'https://fastogt.com')
 configure_file(output : 'config.h', configuration : cdata, install: true, install_dir: 'fastoml/gst')
 
 public_headers = [
+  'fastoml/gst/gsttypes.h',  
   'fastoml/gst/gstmlpreprocess.h',
   'fastoml/gst/gstmlpostprocess.h',
   'fastoml/gst/gstbackend.h',

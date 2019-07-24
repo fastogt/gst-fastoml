@@ -129,8 +129,8 @@ static void gst_video_balance_packed_rgb_impl(GstVideoMLFilter* filter,
                                               GstVideoFrame* out_frame) {
   GstVideoMLFilterPrivate* priv = GST_VIDEO_ML_FILTER_PRIVATE(filter);
   GstVideoInfo* info = &in_frame->info;
-  size_t buffer_size = info->size * sizeof(gfloat);
-  gpointer matrix_data = g_malloc0(buffer_size);
+  size_t buffer_size = info->size * sizeof(matrix_data_t);
+  matrix_data_t* matrix_data = (matrix_data_t*)g_malloc0(buffer_size);
   if (!matrix_data) {
     return;
   }
