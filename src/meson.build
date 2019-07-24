@@ -11,6 +11,7 @@ lib_tensorflow = cc.find_library('tensorflow', dirs : ['/usr/local/lib'])
 inc_tensorflow = include_directories('/usr/local/include')
 
 backends_sources = [
+  'gstvideomloverlay.cc',
   'gstmlpreprocess.cc',
   'gstmlpostprocess.cc',
   'gstbackend.cc',
