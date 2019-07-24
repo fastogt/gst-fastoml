@@ -14,3 +14,18 @@ yolov2 = shared_library('gsttinyyolov2',
   install_dir : plugins_install_dir,
   link_with : backends
 )
+
+yolov3_sources = [
+  'gsttinyyolov3.h',
+  'gsttinyyolov3.cc'
+]
+
+yolov3 = shared_library('gsttinyyolov3',
+  yolov3_sources,
+  cpp_args: plugin_cpp_args,
+  dependencies : [gst_dep, gstvideo_dep, lib_common, lib_fastoml],
+  include_directories : [inc_common, inc_fastoml, public_incdir],
+  install : true,
+  install_dir : plugins_install_dir,
+  link_with : backends
+)

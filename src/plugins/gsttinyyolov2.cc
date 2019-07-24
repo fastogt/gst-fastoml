@@ -113,6 +113,7 @@ void gst_tinyyolov2_init(GstTinyYolov2* self) {
   GstVideoMLFilter* vi_class = GST_VIDEO_ML_FILTER(self);
   self->obj_thresh = DEFAULT_OBJ_THRESH;
   self->prob_thresh = DEFAULT_PROB_THRESH;
+  self->iou_thresh = DEFAULT_IOU_THRESH;
 
   vi_class->pre_process = GST_DEBUG_FUNCPTR(gst_tinyyolov2_preprocess);
   vi_class->post_process = GST_DEBUG_FUNCPTR(gst_tinyyolov2_postprocess);
