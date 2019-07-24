@@ -186,7 +186,7 @@ static void gst_video_balance_planar_yuv(GstVideoMLFilter* filter, GstVideoFrame
 
   gst_video_balance_packed_rgb_impl(filter, rgb_frame, out_frame);
   gst_video_frame_unmap(rgb_frame);
-  gst_video_frame_copy(in_frame, out_frame);
+  gst_video_frame_copy(out_frame, in_frame);
 }
 
 static void gst_video_balance_semiplanar_yuv(GstVideoMLFilter* filter,
@@ -200,7 +200,7 @@ static void gst_video_balance_semiplanar_yuv(GstVideoMLFilter* filter,
 
   gst_video_balance_packed_rgb_impl(filter, rgb_frame, out_frame);
   gst_video_frame_unmap(rgb_frame);
-  gst_video_frame_copy(in_frame, out_frame);
+  gst_video_frame_copy(out_frame, in_frame);
 }
 
 static void gst_video_balance_packed_yuv(GstVideoMLFilter* filter, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
@@ -212,7 +212,7 @@ static void gst_video_balance_packed_yuv(GstVideoMLFilter* filter, GstVideoFrame
 
   gst_video_balance_packed_rgb_impl(filter, rgb_frame, out_frame);
   gst_video_frame_unmap(rgb_frame);
-  gst_video_frame_copy(in_frame, out_frame);
+  gst_video_frame_copy(out_frame, in_frame);
 }
 
 /* get notified of caps and plug in the correct process function */
