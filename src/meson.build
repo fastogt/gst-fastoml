@@ -11,7 +11,8 @@ lib_tensorflow = cc.find_library('tensorflow', dirs : ['/usr/local/lib'])
 inc_tensorflow = include_directories('/usr/local/include')
 
 backends_sources = [
-  'gstinferencepreprocess.cc',
+  'gstmlpreprocess.cc',
+  'gstmlpostprocess.cc',
   'gstbackend.cc',
   'gsttensorflow.cc',
   'gstmlmeta.cc',

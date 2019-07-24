@@ -1,4 +1,4 @@
-#include <fastoml/gst/gstinferencepreprocess.h>
+#include <fastoml/gst/gstmlpreprocess.h>
 
 #include <math.h>
 
