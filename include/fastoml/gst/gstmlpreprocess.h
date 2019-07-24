@@ -12,7 +12,7 @@
  * \param model_channels The number of channels of the model
  */
 
-gboolean gst_normalize(GstVideoFrame* inframe, gdouble mean, gdouble std, gint model_channels);
+gboolean gst_normalize(GstVideoFrame* inframe, gpointer matrix_data, gdouble mean, gdouble std, gint model_channels);
 
 /**
  * \brief Especial normalization used for facenet
@@ -22,7 +22,7 @@ gboolean gst_normalize(GstVideoFrame* inframe, gdouble mean, gdouble std, gint m
  * \param model_channels The number of channels of the model
  */
 
-gboolean gst_normalize_face(GstVideoFrame* inframe, GstVideoFrame* outframe, gint model_channels);
+gboolean gst_normalize_face(GstVideoFrame* inframe, gpointer matrix_data, gint model_channels);
 
 /**
  * \brief Substract the mean value to every pixel
@@ -36,7 +36,7 @@ gboolean gst_normalize_face(GstVideoFrame* inframe, GstVideoFrame* outframe, gin
  */
 
 gboolean gst_subtract_mean(GstVideoFrame* inframe,
-                           GstVideoFrame* outframe,
+                           gpointer matrix_data,
                            gdouble mean_red,
                            gdouble mean_green,
                            gdouble mean_blue,
@@ -50,4 +50,4 @@ gboolean gst_subtract_mean(GstVideoFrame* inframe,
  * \param model_channels The number of channels of the model
  */
 
-gboolean gst_pixel_to_float(GstVideoFrame* inframe, GstVideoFrame* outframe, gint model_channels);
+gboolean gst_pixel_to_float(GstVideoFrame* inframe, gpointer matrix_data, gint model_channels);

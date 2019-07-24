@@ -150,8 +150,30 @@ gboolean gst_backend_stop(GstBackend* self, GError** error) {
   return TRUE;
 }
 
+static size_t GetTopPrediction(fastoml::IPrediction* prediction) {
+  size_t index = 0;
+  float max = -1;
+  size_t num_labels = prediction->GetResultSize() / sizeof(float);
+
+  for (size_t i = 0; i < num_labels; ++i) {
+    float current = 0;
+    common::ErrnoError err = prediction->At(i, &current);
+    if (err) {
+      break;
+    }
+
+    if (current > max) {
+      max = current;
+      index = i;
+    }
+  }
+
+  return index;
+}
+
 gboolean gst_backend_process_frame(GstBackend* self,
                                    GstVideoFrame* input_frame,
+                                   gpointer matrix_data,
                                    gpointer* prediction_data,
                                    gsize* prediction_size,
                                    GError** error) {
@@ -168,7 +190,7 @@ gboolean gst_backend_process_frame(GstBackend* self,
   fastoml::IFrame* frame = nullptr;
   common::draw::Size size(input_frame->info.width, input_frame->info.height);
   GST_LOG_OBJECT(self, "Processing Frame of size %d x %d", input_frame->info.width, input_frame->info.height);
-  common::ErrnoError err = backend->MakeFrame(size, fastoml::ImageFormat::RGB, input_frame->data[0], &frame);
+  common::ErrnoError err = backend->MakeFrame(size, fastoml::ImageFormat::RGB, matrix_data, &frame);
   if (err) {
     g_set_error(error, GST_BACKEND_ERROR, err->GetErrorCode(), "Failed to create frame");
     return FALSE;
@@ -182,6 +204,7 @@ gboolean gst_backend_process_frame(GstBackend* self,
     return FALSE;
   }
 
+  GetTopPrediction(prediction);
   *prediction_size = prediction->GetResultSize();
 
   /*could we avoid memory copy ?*/

@@ -17,6 +17,6 @@ void gst_backend_free(GstBackend*);
 
 gboolean gst_backend_start(GstBackend*, GError**);
 gboolean gst_backend_stop(GstBackend*, GError**);
-gboolean gst_backend_process_frame(GstBackend*, GstVideoFrame*, gpointer*, gsize*, GError**);
+gboolean gst_backend_process_frame(GstBackend*, GstVideoFrame*, gpointer, gpointer*, gsize*, GError**);
 
 G_END_DECLS

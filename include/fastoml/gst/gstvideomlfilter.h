@@ -22,7 +22,7 @@ struct _GstVideoMLFilter {
   GstVideoConverter* convert;
   const GstMetaInfo* inference_meta_info;
 
-  gboolean (*pre_process)(GstVideoMLFilter* vi, GstVideoFrame* frame);
+  gboolean (*pre_process)(GstVideoMLFilter* vi, GstVideoFrame* frame, gpointer matrix_data);
   gboolean (*post_process)(GstVideoMLFilter* videobalance,
                            GstMeta* meta,
                            const gpointer prediction,

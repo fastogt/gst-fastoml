@@ -128,8 +128,16 @@ static void gst_video_balance_packed_rgb_impl(GstVideoMLFilter* filter,
                                               GstVideoFrame* in_frame,
                                               GstVideoFrame* out_frame) {
   GstVideoMLFilterPrivate* priv = GST_VIDEO_ML_FILTER_PRIVATE(filter);
+  GstVideoInfo* info = &in_frame->info;
+  size_t buffer_size = info->size * sizeof(gfloat);
+  gpointer matrix_data = g_malloc0(buffer_size);
+  if (!matrix_data) {
+    return;
+  }
+
   if (filter->pre_process) {
-    if (!filter->pre_process(filter, in_frame)) {
+    if (!filter->pre_process(filter, in_frame, matrix_data)) {
+      g_free(matrix_data);
       return;
     }
   }
@@ -137,20 +145,23 @@ static void gst_video_balance_packed_rgb_impl(GstVideoMLFilter* filter,
   gpointer prediction_data = NULL;
   gsize prediction_size = 0;
   GError* error = NULL;
-  gboolean result = gst_backend_process_frame(priv->backend, in_frame, &prediction_data, &prediction_size, &error);
+  gboolean result =
+      gst_backend_process_frame(priv->backend, in_frame, matrix_data, &prediction_data, &prediction_size, &error);
   if (!result) {
     g_error_free(error);
+    g_free(matrix_data);
     return;
   }
 
   if (filter->post_process) {
     GstMeta* meta = gst_buffer_add_meta(out_frame->buffer, filter->inference_meta_info, NULL);
     gboolean is_valid;
-    if (filter->post_process(filter, meta, prediction_data, prediction_size, &is_valid)) {
+    if (filter->post_process(filter, meta, prediction_data, prediction_size, &is_valid) && is_valid) {
       g_signal_emit(filter, gst_video_inference_signals[NEW_PREDICTION_SIGNAL], 0, meta);
     }
     gst_buffer_remove_meta(out_frame->buffer, meta);
   }
+  g_free(matrix_data);
 }
 
 static void gst_video_balance_packed_rgb(GstVideoMLFilter* filter, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
@@ -166,7 +177,7 @@ GstVideoFrame* gst_create_rgb_frame(GstVideoMLFilter* filter, GstVideoFrame* in_
   GstVideoMLFilterPrivate* priv = GST_VIDEO_ML_FILTER_PRIVATE(filter);
   GstVideoFrame* converted_frame = g_slice_new0(GstVideoFrame);
   GstVideoInfo* info = priv->rgb_info;
-  size_t buffer_size = info->size * sizeof(gfloat);
+  size_t buffer_size = info->size * sizeof(guchar);
   GstBuffer* dest = gst_buffer_new_allocate(NULL, buffer_size, NULL);
   if (!gst_video_frame_map(converted_frame, info, dest, GST_MAP_READWRITE)) {
     g_slice_free(GstVideoFrame, converted_frame);
