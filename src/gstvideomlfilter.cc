@@ -159,7 +159,7 @@ static void gst_video_balance_packed_rgb_impl(GstVideoMLFilter* filter,
     if (filter->post_process(filter, meta, prediction_data, prediction_size, &is_valid) && is_valid) {
       g_signal_emit(filter, gst_video_inference_signals[NEW_PREDICTION_SIGNAL], 0, meta);
     }
-    gst_buffer_remove_meta(out_frame->buffer, meta);
+    // gst_buffer_remove_meta(out_frame->buffer, meta);
   }
   g_free(matrix_data);
 }
