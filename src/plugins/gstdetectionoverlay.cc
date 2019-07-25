@@ -108,7 +108,7 @@ static gboolean plugin_init(GstPlugin* plugin) {
 
 GST_PLUGIN_DEFINE(GST_VERSION_MAJOR,
                   GST_VERSION_MINOR,
-                  detection_overlay,
+                  detectionoverlay,
                   "ML detection overlay plugin",
                   plugin_init,
                   PACKAGE_VERSION,
