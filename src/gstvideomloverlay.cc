@@ -2,9 +2,24 @@
 
 /* pad templates */
 
-#define VIDEO_SRC_CAPS GST_VIDEO_CAPS_MAKE("{RGB, RGBx, RGBA, BGR, BGRx, BGRA, xRGB, ARGB, xBGR, ABGR}")
+#define PROCESSING_CAPS                                \
+  "{ AYUV, ARGB, BGRA, ABGR, RGBA, Y444, xRGB, RGBx, " \
+  "xBGR, BGRx, RGB, BGR, Y42B, YUY2, UYVY, YVYU, "     \
+  "I420, YV12, IYUV, Y41B, NV12, NV21 }"
 
-#define VIDEO_SINK_CAPS GST_VIDEO_CAPS_MAKE("{RGB, RGBx, RGBA, BGR, BGRx, BGRA, xRGB, ARGB, xBGR, ABGR}")
+static GstStaticPadTemplate gst_video_overlay_src_template =
+    GST_STATIC_PAD_TEMPLATE("src",
+                            GST_PAD_SRC,
+                            GST_PAD_ALWAYS,
+                            GST_STATIC_CAPS(GST_VIDEO_CAPS_MAKE(PROCESSING_CAPS) ";"
+                                                                                 "video/x-raw(ANY)"));
+
+static GstStaticPadTemplate gst_video_overlay_sink_template =
+    GST_STATIC_PAD_TEMPLATE("sink",
+                            GST_PAD_SINK,
+                            GST_PAD_ALWAYS,
+                            GST_STATIC_CAPS(GST_VIDEO_CAPS_MAKE(PROCESSING_CAPS) ";"
+                                                                                 "video/x-raw(ANY)"));
 
 GST_DEBUG_CATEGORY_STATIC(gst_video_ml_overlay_debug_category);
 #define GST_CAT_DEFAULT gst_video_ml_overlay_debug_category
@@ -57,14 +72,11 @@ G_DEFINE_TYPE_WITH_CODE(GstVideoMLOverlay,
 static void gst_video_ml_overlay_class_init(GstVideoMLOverlayClass* klass) {
   GObjectClass* gobject_class = G_OBJECT_CLASS(klass);
   GstBaseTransformClass* base_transform_class = GST_BASE_TRANSFORM_CLASS(klass);
+  GstElementClass* gstelement_class = GST_ELEMENT_CLASS(klass);
   GstVideoFilterClass* video_filter_class = GST_VIDEO_FILTER_CLASS(klass);
 
-  gst_element_class_add_pad_template(
-      GST_ELEMENT_CLASS(klass),
-      gst_pad_template_new("src", GST_PAD_SRC, GST_PAD_ALWAYS, gst_caps_from_string(VIDEO_SRC_CAPS)));
-  gst_element_class_add_pad_template(
-      GST_ELEMENT_CLASS(klass),
-      gst_pad_template_new("sink", GST_PAD_SINK, GST_PAD_ALWAYS, gst_caps_from_string(VIDEO_SINK_CAPS)));
+  gst_element_class_add_static_pad_template(gstelement_class, &gst_video_overlay_sink_template);
+  gst_element_class_add_static_pad_template(gstelement_class, &gst_video_overlay_src_template);
 
   gobject_class->set_property = gst_video_ml_overlay_set_property;
   gobject_class->get_property = gst_video_ml_overlay_get_property;

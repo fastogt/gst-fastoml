@@ -70,20 +70,49 @@ static GstFlowReturn gst_detection_overlay_process_meta(GstVideoMLOverlay* overl
                                                         gchar** labels_list,
                                                         gint num_labels) {
   gint channels;
-  switch (GST_VIDEO_FRAME_FORMAT(frame)) {
+  gint width = GST_VIDEO_FRAME_WIDTH(frame);
+  gint height = GST_VIDEO_FRAME_HEIGHT(frame);
+  char* frame_data = (char*)frame->data[0];
+
+  cv::Mat cv_mat;
+  GstVideoFormat format = GST_VIDEO_FRAME_FORMAT(frame);
+  switch (format) {
+    case GST_VIDEO_FORMAT_I420:
+    case GST_VIDEO_FORMAT_YV12:
+    case GST_VIDEO_FORMAT_Y41B:
+    case GST_VIDEO_FORMAT_Y42B:
+    case GST_VIDEO_FORMAT_Y444:
+      cv_mat = cv::Mat(height * 3 / 2, width, CV_8UC1, frame_data);
+      break;
+    case GST_VIDEO_FORMAT_YUY2:
+    case GST_VIDEO_FORMAT_UYVY:
+    case GST_VIDEO_FORMAT_AYUV:
+    case GST_VIDEO_FORMAT_YVYU:
+      return GST_FLOW_ERROR;
+    case GST_VIDEO_FORMAT_NV12:
+    case GST_VIDEO_FORMAT_NV21:
+      return GST_FLOW_ERROR;
+    case GST_VIDEO_FORMAT_ARGB:
+    case GST_VIDEO_FORMAT_ABGR:
+    case GST_VIDEO_FORMAT_RGBA:
+    case GST_VIDEO_FORMAT_BGRA:
+    case GST_VIDEO_FORMAT_xRGB:
+    case GST_VIDEO_FORMAT_xBGR:
+    case GST_VIDEO_FORMAT_RGBx:
+    case GST_VIDEO_FORMAT_BGRx:
+      channels = 4;
+      cv_mat = cv::Mat(height, width, CV_MAKETYPE(CV_8U, channels), frame_data);
+      break;
     case GST_VIDEO_FORMAT_RGB:
     case GST_VIDEO_FORMAT_BGR:
       channels = 3;
+      cv_mat = cv::Mat(height, width, CV_MAKETYPE(CV_8U, channels), frame_data);
       break;
     default:
-      channels = 4;
-      break;
+      return GST_FLOW_ERROR;
   }
-  gint width = GST_VIDEO_FRAME_COMP_STRIDE(frame, 0) / channels;
-  gint height = GST_VIDEO_FRAME_HEIGHT(frame);
 
   GstDetectionMeta* detect_meta = (GstDetectionMeta*)meta;
-  cv::Mat cv_mat = cv::Mat(height, width, CV_MAKETYPE(CV_8U, channels), (char*)frame->data[0]);
   for (gint i = 0; i < detect_meta->num_boxes; ++i) {
     cv::String str;
     BBox box = detect_meta->boxes[i];
@@ -98,7 +127,6 @@ static GstFlowReturn gst_detection_overlay_process_meta(GstVideoMLOverlay* overl
     cv::rectangle(cv_mat, cv::Point(box.x, box.y), cv::Point(box.x + box.width, box.y + box.height),
                   colors[box.label % N_C], thickness);
   }
-
   return GST_FLOW_OK;
 }
 
