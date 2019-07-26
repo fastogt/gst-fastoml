@@ -104,9 +104,14 @@ static void gst_tinyyolov3_class_init(GstTinyYolov3Class* klass) {
 }
 
 static void gst_tinyyolov3_init(GstTinyYolov3* self) {
+  GstVideoMLFilter* vi_class = GST_VIDEO_ML_FILTER(self);
   self->obj_thresh = DEFAULT_OBJ_THRESH;
   self->prob_thresh = DEFAULT_PROB_THRESH;
   self->iou_thresh = DEFAULT_IOU_THRESH;
+
+  vi_class->pre_process = GST_DEBUG_FUNCPTR(gst_tinyyolov3_preprocess);
+  vi_class->post_process = GST_DEBUG_FUNCPTR(gst_tinyyolov3_postprocess);
+  vi_class->inference_meta_info = gst_detection_meta_get_info();
 }
 
 void gst_tinyyolov3_dispose(GObject* object) {

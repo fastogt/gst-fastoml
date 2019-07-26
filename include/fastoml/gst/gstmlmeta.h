@@ -16,49 +16,23 @@
 
 #include <gst/gst.h>
 
-#define GST_EMBEDDING_META_API_TYPE (gst_embedding_meta_api_get_type())
-#define GST_EMBEDDING_META_INFO (gst_embedding_meta_get_info())
-#define GST_CLASSIFICATION_META_API_TYPE (gst_classification_meta_api_get_type())
-#define GST_CLASSIFICATION_META_INFO (gst_classification_meta_get_info())
 #define GST_DETECTION_META_API_TYPE (gst_detection_meta_api_get_type())
 #define GST_DETECTION_META_INFO (gst_detection_meta_get_info())
 
-typedef struct _BBox BBox;
-struct _BBox {
+struct BBox {
   gint label;
-  gdouble prob;
-  gdouble x;
-  gdouble y;
-  gdouble width;
-  gdouble height;
+  gfloat prob;
+  gfloat x;
+  gfloat y;
+  gfloat width;
+  gfloat height;
 };
 
-typedef struct _GstEmbeddingMeta GstEmbeddingMeta;
-struct _GstEmbeddingMeta {
-  GstMeta meta;
-  gint num_dimensions;
-  gdouble* embedding;
-};
-
-typedef struct _GstClassificationMeta GstClassificationMeta;
-struct _GstClassificationMeta {
-  GstMeta meta;
-  gint num_labels;
-  gdouble* label_probs;
-};
-
-typedef struct _GstDetectionMeta GstDetectionMeta;
-struct _GstDetectionMeta {
+struct GstDetectionMeta {
   GstMeta meta;
   gint num_boxes;
   BBox* boxes;
 };
-
-GType gst_embedding_meta_api_get_type(void);
-const GstMetaInfo* gst_embedding_meta_get_info(void);
-
-GType gst_classification_meta_api_get_type(void);
-const GstMetaInfo* gst_classification_meta_get_info(void);
 
 GType gst_detection_meta_api_get_type(void);
 const GstMetaInfo* gst_detection_meta_get_info(void);

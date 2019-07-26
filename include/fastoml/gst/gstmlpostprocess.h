@@ -17,8 +17,6 @@
 #include <fastoml/gst/gstmlmeta.h>
 #include <fastoml/gst/gstvideomlfilter.h>
 
-gboolean gst_fill_classification_meta(GstClassificationMeta* class_meta, const gpointer prediction, gsize predsize);
-
 gboolean gst_create_boxes(GstVideoMLFilter* vi,
                           const gpointer prediction,
                           GstDetectionMeta* detect_meta,

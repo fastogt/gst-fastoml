@@ -40,18 +40,6 @@ static void gst_get_boxes_from_prediction_float(gfloat obj_thresh,
                                                 gint* elements,
                                                 gint total_boxes);
 
-gboolean gst_fill_classification_meta(GstClassificationMeta* class_meta, const gpointer prediction, gsize predsize) {
-  g_return_val_if_fail(class_meta != NULL, FALSE);
-  g_return_val_if_fail(prediction != NULL, FALSE);
-
-  class_meta->num_labels = predsize / sizeof(gfloat);
-  class_meta->label_probs = (gdouble*)g_malloc(class_meta->num_labels * sizeof(gdouble));
-  for (gint i = 0; i < class_meta->num_labels; ++i) {
-    class_meta->label_probs[i] = (gdouble)((gfloat*)prediction)[i];
-  }
-  return TRUE;
-}
-
 static gdouble gst_intersection_over_union(BBox box_1, BBox box_2) {
   /*
    * Evaluate the intersection-over-union for two boxes
@@ -238,34 +226,28 @@ static void gst_get_boxes_from_prediction_float(gfloat obj_thresh,
                                                 BBox* boxes,
                                                 gint* elements,
                                                 gint total_boxes) {
-  gint i, c;
-  gint index;
-  gdouble obj_prob;
-  gdouble cur_class_prob, max_class_prob;
-  gint max_class_prob_index;
   gint counter = 0;
-  gint box_class_base;
-  gint box_dim = 5;
-  gint classes = 80;
-  gint dimensions_per_box = box_dim + classes;
+  const gint box_dim = 5;
+  const gint classes = 80;
+  const gint dimensions_per_box = box_dim + classes;
 
   g_return_if_fail(boxes != NULL);
   g_return_if_fail(elements != NULL);
 
   /* Iterate boxes */
-  for (i = 0; i < total_boxes; i++) {
-    index = i * dimensions_per_box;
-    obj_prob = ((gfloat*)prediction)[index + 4];
+  for (gint i = 0; i < total_boxes; i++) {
+    gint index = i * dimensions_per_box;
+    gfloat obj_prob = ((gfloat*)prediction)[index + 4];
 
     /* If the objectness score is over the threshold add it to the boxes list */
     if (obj_prob > obj_thresh) {
-      max_class_prob = 0;
-      max_class_prob_index = 0;
-      box_class_base = index + box_dim;
+      gfloat max_class_prob = 0;
+      gint max_class_prob_index = 0;
+      gint box_class_base = index + box_dim;
 
       /* Iterate each class probability */
-      for (c = 0; c < classes; c++) {
-        cur_class_prob = ((gfloat*)prediction)[box_class_base + c];
+      for (gint c = 0; c < classes; c++) {
+        gfloat cur_class_prob = ((gfloat*)prediction)[box_class_base + c];
         if (cur_class_prob > max_class_prob) {
           max_class_prob = cur_class_prob;
           max_class_prob_index = c;

@@ -20,17 +20,17 @@
 
 gboolean gst_normalize(GstVideoFrame* inframe,
                        matrix_data_t* matrix_data,
-                       gdouble mean,
-                       gdouble std,
+                       gfloat mean,
+                       gfloat std,
                        gint model_channels);
 
 gboolean gst_normalize_face(GstVideoFrame* inframe, matrix_data_t* matrix_data, gint model_channels);
 
 gboolean gst_subtract_mean(GstVideoFrame* inframe,
                            matrix_data_t* matrix_data,
-                           gdouble mean_red,
-                           gdouble mean_green,
-                           gdouble mean_blue,
+                           gfloat mean_red,
+                           gfloat mean_green,
+                           gfloat mean_blue,
                            gint model_channels);
 
 gboolean gst_pixel_to_float(GstVideoFrame* inframe, matrix_data_t* matrix_data, gint model_channels);
