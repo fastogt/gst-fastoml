@@ -7,7 +7,7 @@ inc_common = include_directories('/usr/local/include')
 lib_fastoml = cc.find_library('fastoml', dirs : ['/usr/local/lib'])
 inc_fastoml = include_directories('/usr/local/include')
 
-lib_tensorflow = cc.find_library('tensorflow', dirs : ['/usr/local/lib'])
+lib_tensorflow = cc.find_library('tensorflow', dirs : ['/usr/local/lib'], required:false)
 inc_tensorflow = include_directories('/usr/local/include')
 
 backends_sources = [
