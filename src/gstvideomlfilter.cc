@@ -184,7 +184,7 @@ static void gst_video_balance_packed_rgb(GstVideoMLFilter* filter, GstVideoFrame
   gst_video_frame_copy(out_frame, in_frame);
 }
 
-GstVideoFrame* gst_create_rgb_frame(GstVideoMLFilter* filter, GstVideoFrame* in_frame) {
+static GstVideoFrame* gst_create_rgb_frame(GstVideoMLFilter* filter, GstVideoFrame* in_frame, GstBuffer** out_buff) {
   if (!filter->convert) {
     return NULL;
   }
@@ -200,11 +200,13 @@ GstVideoFrame* gst_create_rgb_frame(GstVideoMLFilter* filter, GstVideoFrame* in_
   }
 
   gst_video_converter_frame(filter->convert, in_frame, converted_frame);
+  *out_buff = dest;
   return converted_frame;
 }
 
 static void gst_video_balance_planar_yuv(GstVideoMLFilter* filter, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
-  GstVideoFrame* rgb_frame = gst_create_rgb_frame(filter, in_frame);
+  GstBuffer* buff = NULL;
+  GstVideoFrame* rgb_frame = gst_create_rgb_frame(filter, in_frame, &buff);
   if (!rgb_frame) {
     gst_video_frame_copy(out_frame, in_frame);
     return;
@@ -212,13 +214,16 @@ static void gst_video_balance_planar_yuv(GstVideoMLFilter* filter, GstVideoFrame
 
   gst_video_balance_packed_rgb_impl(filter, rgb_frame, out_frame);
   gst_video_frame_unmap(rgb_frame);
+  g_slice_free(GstVideoFrame, rgb_frame);
+  gst_buffer_unref(buff);
   gst_video_frame_copy(out_frame, in_frame);
 }
 
 static void gst_video_balance_semiplanar_yuv(GstVideoMLFilter* filter,
                                              GstVideoFrame* in_frame,
                                              GstVideoFrame* out_frame) {
-  GstVideoFrame* rgb_frame = gst_create_rgb_frame(filter, in_frame);
+  GstBuffer* buff = NULL;
+  GstVideoFrame* rgb_frame = gst_create_rgb_frame(filter, in_frame, &buff);
   if (!rgb_frame) {
     gst_video_frame_copy(out_frame, in_frame);
     return;
@@ -226,11 +231,14 @@ static void gst_video_balance_semiplanar_yuv(GstVideoMLFilter* filter,
 
   gst_video_balance_packed_rgb_impl(filter, rgb_frame, out_frame);
   gst_video_frame_unmap(rgb_frame);
+  g_slice_free(GstVideoFrame, rgb_frame);
+  gst_buffer_unref(buff);
   gst_video_frame_copy(out_frame, in_frame);
 }
 
 static void gst_video_balance_packed_yuv(GstVideoMLFilter* filter, GstVideoFrame* in_frame, GstVideoFrame* out_frame) {
-  GstVideoFrame* rgb_frame = gst_create_rgb_frame(filter, in_frame);
+  GstBuffer* buff = NULL;
+  GstVideoFrame* rgb_frame = gst_create_rgb_frame(filter, in_frame, &buff);
   if (!rgb_frame) {
     gst_video_frame_copy(out_frame, in_frame);
     return;
@@ -238,6 +246,8 @@ static void gst_video_balance_packed_yuv(GstVideoMLFilter* filter, GstVideoFrame
 
   gst_video_balance_packed_rgb_impl(filter, rgb_frame, out_frame);
   gst_video_frame_unmap(rgb_frame);
+  g_slice_free(GstVideoFrame, rgb_frame);
+  gst_buffer_unref(buff);
   gst_video_frame_copy(out_frame, in_frame);
 }
 
