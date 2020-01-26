@@ -175,6 +175,7 @@ static void gst_video_balance_packed_rgb_impl(GstVideoMLFilter* filter,
     }
     // gst_buffer_remove_meta(out_frame->buffer, meta);
   }
+  g_free(prediction_data);
   g_free(matrix_data);
 }
 
